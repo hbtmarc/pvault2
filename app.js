@@ -179,11 +179,15 @@ function createTabs() {
       return;
     }
 
-    const tab = document.createElement("a");
-    tab.className = "tab";
-    tab.href = item.hash + window.location.search;
-    tab.textContent = item.label;
-    topTabs.append(tab);
+    const button = document.createElement("button");
+    button.className = "tab";
+    button.type = "button";
+    button.textContent = item.label;
+    button.setAttribute("data-hash", item.hash);
+    button.addEventListener("click", () => {
+      navigateTo(item.hash);
+    });
+    topTabs.append(button);
   });
 }
 
@@ -200,12 +204,11 @@ function createTabButton(label, isActive, onClick) {
 function updateActiveTab() {
   const activeHash = getRoute();
   Array.from(topTabs.querySelectorAll(".tab")).forEach((tab) => {
-    const href = tab.getAttribute("href");
-    if (!href) {
+    const tabHash = tab.getAttribute("data-hash");
+    if (!tabHash) {
       tab.classList.remove("is-active");
       return;
     }
-    const tabHash = href.split("?")[0];
     tab.classList.toggle("is-active", tabHash === activeHash);
   });
 }
@@ -213,37 +216,43 @@ function updateActiveTab() {
 function createMonthToolbar() {
   monthToolbar.innerHTML = "";
 
-  const label = document.createElement("div");
-  label.className = "month-display";
-  label.textContent = "Mês selecionado";
+  const prevButton = document.createElement("button");
+  prevButton.className = "month-nav-button";
+  prevButton.setAttribute("aria-label", "Mês anterior");
+  prevButton.innerHTML = "‹";
+  prevButton.addEventListener("click", goPrev);
 
-  const controls = document.createElement("div");
-  controls.className = "month-controls";
-
-  const prevButton = createButton("Anterior", {
-    variant: "secondary",
-    onClick: goPrev,
-  });
-  const nextButton = createButton("Próximo", {
-    variant: "secondary",
-    onClick: goNext,
-  });
+  const display = document.createElement("div");
+  display.className = "month-display";
+  display.textContent = formatMonthLabel(monthState.current);
+  display.setAttribute("title", "Clique para voltar ao mês atual (Ctrl+Click para selecionar)");
 
   const picker = document.createElement("input");
+  picker.className = "month-picker";
   picker.type = "month";
   picker.value = monthState.current;
+  picker.setAttribute("aria-label", "Selecionar mês");
   picker.addEventListener("change", (event) => {
     if (event.target.value) {
       setMonth(event.target.value);
     }
   });
 
-  const display = document.createElement("span");
-  display.className = "month-display";
-  display.textContent = formatMonthLabel(monthState.current);
+  display.addEventListener("click", (event) => {
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      picker.showPicker ? picker.showPicker() : picker.click();
+    } else {
+      setMonth(getDefaultMonth());
+    }
+  });
 
-  controls.append(prevButton, picker, nextButton);
-  monthToolbar.append(label, display, controls);
+  const nextButton = document.createElement("button");
+  nextButton.className = "month-nav-button";
+  nextButton.setAttribute("aria-label", "Próximo mês");
+  nextButton.innerHTML = "›";
+  nextButton.addEventListener("click", goNext);
+
+  monthToolbar.append(prevButton, display, picker, nextButton);
 }
 
 function formatMonthLabel(monthKey) {
@@ -251,7 +260,6 @@ function formatMonthLabel(monthKey) {
   const date = new Date(Number(year), Number(month) - 1, 1);
   return date.toLocaleDateString("pt-BR", {
     month: "long",
-    year: "numeric",
   });
 }
 
@@ -308,9 +316,14 @@ function renderMonthToolbar() {
 function renderLogin() {
   appView.innerHTML = "";
 
+  const container = document.createElement("div");
+  container.style.maxWidth = "420px";
+  container.style.margin = "3rem auto 0";
+  container.style.padding = "0 1rem";
+
   const card = createCard(
-    "Acesse sua conta",
-    "Entre com email e senha para continuar."
+    "Entrar no PVault",
+    "Controle suas finanças de forma simples."
   );
 
   const form = document.createElement("form");
@@ -325,12 +338,16 @@ function renderLogin() {
 
   const actionRow = document.createElement("div");
   actionRow.className = "actions";
+  actionRow.style.gap = "0.5rem";
 
   const loginButton = createButton("Entrar", { type: "button" });
+  loginButton.style.flex = "1";
+  
   const registerButton = createButton("Criar conta", {
     type: "button",
     variant: "secondary",
   });
+  registerButton.style.flex = "1";
 
   const runAuth = async (mode) => {
     feedback.textContent = "";
@@ -360,8 +377,9 @@ function renderLogin() {
   actionRow.append(loginButton, registerButton);
   form.append(emailField.wrapper, passwordField.wrapper, feedback, actionRow);
   card.append(form);
+  container.append(card);
 
-  appView.append(card);
+  appView.append(container);
   updateActiveTab();
 }
 
@@ -766,7 +784,7 @@ function parseInstallment(description) {
     return null;
   }
   const normalized = normalizeDescription(description);
-  const match = normalized.match(/(?:parcela\\s*)?(\\d{1,2})\\s*\\/\\s*(\\d{1,2})/);
+  const match = normalized.match(/(?:parcela\s*)?(\d{1,2})\s*\/\s*(\d{1,2})/);
   if (!match) {
     return null;
   }
@@ -1040,10 +1058,30 @@ async function renderDashboard() {
 
   const summaryGrid = document.createElement("div");
   summaryGrid.className = "summary-grid";
+  
+  const createStatCard = (label, value, isPositive) => {
+    const card = document.createElement("div");
+    card.className = "card stat-card";
+    
+    const labelEl = document.createElement("div");
+    labelEl.className = "stat-label";
+    labelEl.textContent = label;
+    
+    const valueEl = document.createElement("div");
+    valueEl.className = "stat-value";
+    if (isPositive !== undefined) {
+      valueEl.classList.add(isPositive ? "positive" : "negative");
+    }
+    valueEl.textContent = formatCurrency(value);
+    
+    card.append(labelEl, valueEl);
+    return card;
+  };
+  
   summaryGrid.append(
-    createCard("Receita total", formatCurrency(totalIncome)),
-    createCard("Despesa total", formatCurrency(totalExpense)),
-    createCard("Saldo", formatCurrency(balance))
+    createStatCard("Receitas", totalIncome, true),
+    createStatCard("Despesas", totalExpense, false),
+    createStatCard("Saldo", balance, balance >= 0)
   );
 
   const incomeList = renderTransactionList(
@@ -1068,33 +1106,18 @@ async function renderTransactions() {
     monthState.current
   );
 
-  const income = sortByDateDesc(transactions.filter((tx) => tx.kind === "income"));
-  const expenses = sortByDateDesc(
-    transactions.filter((tx) => tx.kind === "expense")
-  );
-  const transfers = sortByDateDesc(
-    transactions.filter((tx) => tx.kind === "transfer")
-  );
-
-  const actionBar = document.createElement("div");
-  actionBar.className = "actions";
-  const newButton = createButton("Nova transação", {
+  const all = sortByDateDesc(transactions);
+  
+  const addButton = createButton("+ Nova", {
     onClick: () => openTransactionModal(),
   });
-  actionBar.append(newButton);
 
-  const incomeList = renderTransactionList("Receitas", income, {
-    showActions: true,
+  const list = renderTransactionList("Transações", all, {
+    action: addButton,
+    showActions: false,
   });
-  const expenseList = renderTransactionList("Despesas", expenses, {
-    showActions: true,
-  });
-  const transferBlock = renderTransferSection(transfers, { showActions: true });
 
-  appView.append(actionBar, incomeList, expenseList);
-  if (transferBlock) {
-    appView.append(transferBlock);
-  }
+  appView.append(list);
 }
 
 async function renderCards() {
@@ -2138,8 +2161,8 @@ function init() {
   syncMonthFromStorage();
   renderMonthToolbar();
   initAuth();
-  renderRoute();
   window.addEventListener("hashchange", handleHashChange);
+  renderRoute();
 }
 
 init();

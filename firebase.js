@@ -15,14 +15,14 @@ import {
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  databaseURL: "YOUR_DATABASE_URL",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
-};
+    apiKey: "AIzaSyBj5NDookHiZy0oPRRCLnrWjfmFkM2XBmw",
+    authDomain: "pvault2-marc35.firebaseapp.com",
+    projectId: "pvault2-marc35",
+    storageBucket: "pvault2-marc35.firebasestorage.app",
+    messagingSenderId: "519670184185",
+    appId: "1:519670184185:web:dba02b67e82014b0b84a28",
+    measurementId: "G-NBHCL8LBJQ"
+  };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
