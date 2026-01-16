@@ -8,6 +8,7 @@ import {
   push,
   update,
   get,
+  set,
 } from "./firebase.js";
 
 const routes = {
@@ -28,30 +29,50 @@ const routes = {
     description: "Resumo das faturas abertas e pagas.",
   },
   "#/app/import": {
-    title: "Importar",
+    title: "Ajustes",
     description: "Importe arquivos OFX ou CSV rapidamente.",
   },
 };
 
-const categories = [
-  { id: "market", label: "Mercado" },
-  { id: "transport", label: "Transporte" },
-  { id: "subscriptions", label: "Assinaturas" },
-  { id: "health", label: "Saúde" },
-  { id: "restaurants", label: "Restaurantes" },
-  { id: "transfers", label: "Transferências" },
-  { id: "income", label: "Receitas" },
-  { id: "utilities", label: "Contas" },
-  { id: "education", label: "Educação" },
-  { id: "others", label: "Outros" },
-];
+const categories = {
+  gerais: [
+    { id: "income", label: "Receitas" },
+    { id: "market", label: "Mercado" },
+    { id: "shopping", label: "Compras" },
+    { id: "transport", label: "Transporte" },
+    { id: "restaurants", label: "Restaurantes" },
+    { id: "health", label: "Saúde" },
+    { id: "utilities", label: "Contas" },
+    { id: "housing", label: "Moradia" },
+    { id: "education", label: "Educação" },
+    { id: "transfers", label: "Transferências" },
+  ],
+  complementares: [
+    { id: "subscriptions", label: "Assinaturas" },
+    { id: "leisure", label: "Lazer" },
+    { id: "clothing", label: "Vestuário" },
+    { id: "investments", label: "Investimentos" },
+    { id: "beauty", label: "Beleza" },
+    { id: "pets", label: "Pets" },
+    { id: "technology", label: "Tecnologia" },
+    { id: "travel", label: "Viagens" },
+    { id: "gifts", label: "Presentes" },
+    { id: "taxes", label: "Impostos" },
+    { id: "insurance", label: "Seguros" },
+    { id: "gym", label: "Academia" },
+    { id: "phone", label: "Telefonia" },
+    { id: "work", label: "Trabalho" },
+    { id: "donations", label: "Doações" },
+    { id: "others", label: "Outros" },
+  ],
+};
 
 const navItems = [
   { label: "Dashboard", hash: "#/app/dashboard" },
   { label: "Lançamentos", hash: "#/app/transactions" },
   { label: "Cartões", hash: "#/app/cards" },
   { label: "Faturas", hash: "#/app/invoices" },
-  { label: "Importar", hash: "#/app/import" },
+  { label: "Ajustes", hash: "#/app/import" },
   { label: "Sair", action: "logout" },
 ];
 
@@ -176,6 +197,34 @@ function createSelect(labelText, name, options) {
     opt.textContent = option.label;
     select.append(opt);
   });
+  wrapper.append(label, select);
+  return { wrapper, select };
+}
+
+function createSelectWithGroups(labelText, name, groups) {
+  const wrapper = document.createElement("label");
+  const label = document.createElement("span");
+  label.textContent = labelText;
+  const select = document.createElement("select");
+  select.name = name;
+  select.required = true;
+  const emptyOption = document.createElement("option");
+  emptyOption.value = "";
+  emptyOption.textContent = "Selecione";
+  select.append(emptyOption);
+  
+  Object.entries(groups).forEach(([groupName, items]) => {
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = groupName.charAt(0).toUpperCase() + groupName.slice(1);
+    items.forEach((item) => {
+      const opt = document.createElement("option");
+      opt.value = item.id;
+      opt.textContent = item.label;
+      optgroup.append(opt);
+    });
+    select.append(optgroup);
+  });
+  
   wrapper.append(label, select);
   return { wrapper, select };
 }
@@ -348,6 +397,23 @@ function renderMonthToolbar() {
 }
 
 function renderLogin() {
+  // Ocultar top-bar e month-toolbar
+  const topBar = document.querySelector('.top-bar');
+  const monthToolbar = document.getElementById('month-toolbar');
+  const appView = document.getElementById('app-view');
+  
+  if (topBar) topBar.style.display = 'none';
+  if (monthToolbar) monthToolbar.style.display = 'none';
+  if (appView) {
+    appView.style.maxWidth = '460px';
+    appView.style.margin = '0 auto';
+    appView.style.paddingTop = '0';
+    appView.style.minHeight = '100vh';
+    appView.style.display = 'flex';
+    appView.style.alignItems = 'center';
+    appView.style.justifyContent = 'center';
+  }
+  
   appView.innerHTML = "";
 
   const card = createCard(
@@ -450,10 +516,10 @@ function createTransactionModal() {
   ]);
   kindField.select.value = "expense";
 
-  const categoryField = createSelect(
+  const categoryField = createSelectWithGroups(
     "Categoria",
     "categoryId",
-    categories.map((item) => ({ value: item.id, label: item.label }))
+    categories
   );
   
   const cardField = createSelect("Cartão (opcional)", "cardId", []);
@@ -462,6 +528,124 @@ function createTransactionModal() {
   cardField.select.required = false;
   invoiceField.select.required = false;
   categoryField.select.required = false;
+  
+  // Campo de parcelamento
+  const installmentWrapper = document.createElement("div");
+  installmentWrapper.className = "installment-section hidden";
+  
+  const installmentLabel = document.createElement("label");
+  installmentLabel.className = "checkbox";
+  const installmentCheckbox = document.createElement("input");
+  installmentCheckbox.type = "checkbox";
+  installmentCheckbox.id = "installment-checkbox";
+  const installmentText = document.createElement("span");
+  installmentText.textContent = "Compra parcelada";
+  installmentLabel.append(installmentCheckbox, installmentText);
+  
+  const installmentInputWrapper = document.createElement("div");
+  installmentInputWrapper.className = "installment-input-wrapper hidden";
+  
+  const installmentInput = createInput("Número de parcelas", "number", "installments");
+  installmentInput.input.min = "2";
+  installmentInput.input.max = "36";
+  installmentInput.input.placeholder = "Ex: 12";
+  installmentInput.input.required = false; // Não é obrigatório por padrão
+  
+  const installmentPreview = document.createElement("div");
+  installmentPreview.className = "installment-preview";
+  installmentPreview.style.fontSize = "0.875rem";
+  installmentPreview.style.color = "var(--text-secondary)";
+  installmentPreview.style.marginTop = "0.5rem";
+  
+  installmentInputWrapper.append(installmentInput.wrapper, installmentPreview);
+  installmentWrapper.append(installmentLabel, installmentInputWrapper);
+  
+  // Campo de recorrência (receitas)
+  const recurrenceWrapper = document.createElement("div");
+  recurrenceWrapper.className = "recurrence-section hidden";
+  
+  const recurrenceLabel = document.createElement("label");
+  recurrenceLabel.className = "checkbox";
+  const recurrenceCheckbox = document.createElement("input");
+  recurrenceCheckbox.type = "checkbox";
+  recurrenceCheckbox.id = "recurrence-checkbox";
+  const recurrenceText = document.createElement("span");
+  recurrenceText.textContent = "Receita recorrente (criar 12 meses)";
+  recurrenceLabel.append(recurrenceCheckbox, recurrenceText);
+  
+  recurrenceWrapper.append(recurrenceLabel);
+  
+  // Desmarcar parcelamento se recorrência for marcada
+  recurrenceCheckbox.addEventListener("change", () => {
+    if (recurrenceCheckbox.checked) {
+      installmentCheckbox.checked = false;
+      installmentInputWrapper.classList.add("hidden");
+      installmentInput.input.value = "";
+      installmentPreview.textContent = "";
+    }
+  });
+  
+  // Mostrar/ocultar opção de recorrência apenas para receitas
+  const toggleRecurrenceOption = () => {
+    const isIncome = kindField.select.value === "income";
+    recurrenceWrapper.classList.toggle("hidden", !isIncome);
+    
+    if (!isIncome) {
+      recurrenceCheckbox.checked = false;
+    }
+  };
+  
+  kindField.select.addEventListener("change", toggleRecurrenceOption);
+  
+  // Lógica de parcelamento
+  installmentCheckbox.addEventListener("change", () => {
+    installmentInputWrapper.classList.toggle("hidden", !installmentCheckbox.checked);
+    if (!installmentCheckbox.checked) {
+      installmentInput.input.value = "";
+      installmentPreview.textContent = "";
+    } else {
+      // Se parcelamento for marcado, desmarcar recorrência
+      recurrenceCheckbox.checked = false;
+    }
+  });
+  
+  const updateInstallmentPreview = () => {
+    const amount = parseFloat(amountField.input.value) || 0;
+    const installments = parseInt(installmentInput.input.value) || 0;
+    
+    if (amount > 0 && installments >= 2) {
+      const installmentValue = amount / installments;
+      const lastInstallment = amount - (installmentValue * (installments - 1));
+      
+      installmentPreview.innerHTML = `
+        <strong>${installments}x</strong> de <strong>${formatCurrency(installmentValue)}</strong>
+        ${Math.abs(lastInstallment - installmentValue) > 0.01 ? 
+          `<br><small>Última parcela: ${formatCurrency(lastInstallment)}</small>` : ''}
+      `;
+    } else {
+      installmentPreview.textContent = "";
+    }
+  };
+  
+  amountField.input.addEventListener("input", updateInstallmentPreview);
+  installmentInput.input.addEventListener("input", updateInstallmentPreview);
+  
+  // Mostrar/ocultar opção de parcelamento baseado em cartão + tipo despesa
+  const toggleInstallmentOption = () => {
+    const hasCard = cardField.select.value !== "";
+    const isExpense = kindField.select.value === "expense";
+    installmentWrapper.classList.toggle("hidden", !hasCard || !isExpense);
+    
+    if (!hasCard || !isExpense) {
+      installmentCheckbox.checked = false;
+      installmentInputWrapper.classList.add("hidden");
+      installmentInput.input.value = "";
+      installmentPreview.textContent = "";
+    }
+  };
+  
+  cardField.select.addEventListener("change", toggleInstallmentOption);
+  kindField.select.addEventListener("change", toggleInstallmentOption);
 
   const feedback = document.createElement("p");
   feedback.className = "form-feedback";
@@ -493,6 +677,8 @@ function createTransactionModal() {
     categoryField.wrapper,
     cardField.wrapper,
     invoiceField.wrapper,
+    installmentWrapper,
+    recurrenceWrapper,
     ruleLabel,
     feedback,
     actions
@@ -501,6 +687,16 @@ function createTransactionModal() {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     feedback.textContent = "";
+    
+    const installments = installmentCheckbox.checked ? parseInt(installmentInput.input.value) || 0 : 0;
+    const isRecurrent = recurrenceCheckbox.checked;
+    
+    // Validações
+    if (installments > 0 && (installments < 2 || installments > 36)) {
+      feedback.textContent = "Número de parcelas deve ser entre 2 e 36.";
+      return;
+    }
+    
     const payload = buildTransactionPayload({
       date: dateField.input,
       description: descriptionField.input,
@@ -524,6 +720,19 @@ function createTransactionModal() {
       if (!payload.categoryId) {
         payload.categoryId = suggestCategory(payload);
       }
+      
+      // Se for parcelado, adicionar notação de parcela à descrição
+      if (installments > 1 && payload.cardId && payload.kind === "expense") {
+        // O sistema detecta automaticamente a notação "1/12" na descrição
+        payload.description = `${payload.description} 1/${installments}`;
+      }
+      
+      // Se for recorrente, marcar na descrição para criar 12 meses
+      if (isRecurrent && payload.kind === "income") {
+        payload.description = `${payload.description} [REC:1/12]`;
+      }
+      
+      // Criar transação (o sistema criará as parcelas/recorrências automaticamente)
       if (transactionModal?.txId) {
         await transactionRepository.updateTransaction(
           transactionModal.txId,
@@ -532,12 +741,14 @@ function createTransactionModal() {
       } else {
         await transactionRepository.createTransaction(payload);
       }
+      
       if (ruleCheckbox.checked && payload.categoryId) {
         await saveMerchantRule(payload.description, payload.categoryId);
       }
       closeTransactionModal();
       await renderRoute();
     } catch (error) {
+      console.error('Error saving transaction:', error);
       feedback.textContent = "Não foi possível salvar a transação.";
     }
   });
@@ -562,6 +773,122 @@ function createTransactionModal() {
     feedback,
     txId: null,
   };
+}
+
+function showInstallmentDeleteModal(tx) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+
+  const modal = document.createElement("div");
+  modal.className = "modal";
+  modal.style.maxWidth = "400px";
+
+  const title = document.createElement("h2");
+  title.textContent = "Excluir parcela";
+
+  const description = document.createElement("p");
+  description.style.marginBottom = "1.5rem";
+  description.style.color = "var(--text-secondary)";
+  description.textContent = `Esta é a parcela ${tx.installment.current}/${tx.installment.total} de "${tx.description}". O que deseja fazer?`;
+
+  const btnContainer = document.createElement("div");
+  btnContainer.style.display = "flex";
+  btnContainer.style.gap = "0.75rem";
+  btnContainer.style.flexDirection = "column";
+
+  const deleteCurrentBtn = createButton("Excluir apenas esta parcela", { variant: "secondary" });
+  deleteCurrentBtn.addEventListener("click", async () => {
+    if (confirm(`Excluir apenas a parcela ${tx.installment.current}/${tx.installment.total}?`)) {
+      await transactionRepository.deleteTransaction(tx.id);
+      document.body.removeChild(overlay);
+      await renderRoute();
+    }
+  });
+
+  const deleteFutureBtn = createButton("Excluir esta e todas as futuras", { variant: "danger" });
+  deleteFutureBtn.addEventListener("click", async () => {
+    const remaining = tx.installment.total - tx.installment.current + 1;
+    if (confirm(`Excluir ${remaining} parcela(s) (da ${tx.installment.current} até a ${tx.installment.total})?`)) {
+      await transactionRepository.deleteFutureInstallments(tx);
+      document.body.removeChild(overlay);
+      await renderRoute();
+    }
+  });
+
+  const cancelBtn = createButton("Cancelar", { variant: "secondary" });
+  cancelBtn.addEventListener("click", () => {
+    document.body.removeChild(overlay);
+  });
+
+  btnContainer.append(deleteCurrentBtn, deleteFutureBtn, cancelBtn);
+  modal.append(title, description, btnContainer);
+  overlay.appendChild(modal);
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      document.body.removeChild(overlay);
+    }
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function showRecurrenceDeleteModal(tx) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+
+  const modal = document.createElement("div");
+  modal.className = "modal";
+  modal.style.maxWidth = "400px";
+
+  const title = document.createElement("h2");
+  title.textContent = "Excluir recorrência";
+
+  const description = document.createElement("p");
+  description.style.marginBottom = "1.5rem";
+  description.style.color = "var(--text-secondary)";
+  description.textContent = `Esta é a recorrência ${tx.recurrence.current}/${tx.recurrence.total} de "${tx.description}". O que deseja fazer?`;
+
+  const btnContainer = document.createElement("div");
+  btnContainer.style.display = "flex";
+  btnContainer.style.gap = "0.75rem";
+  btnContainer.style.flexDirection = "column";
+
+  const deleteCurrentBtn = createButton("Excluir apenas esta", { variant: "secondary" });
+  deleteCurrentBtn.addEventListener("click", async () => {
+    if (confirm(`Excluir apenas a recorrência ${tx.recurrence.current}/${tx.recurrence.total}?`)) {
+      await transactionRepository.deleteTransaction(tx.id);
+      document.body.removeChild(overlay);
+      await renderRoute();
+    }
+  });
+
+  const deleteFutureBtn = createButton("Excluir esta e todas as futuras", { variant: "danger" });
+  deleteFutureBtn.addEventListener("click", async () => {
+    const remaining = tx.recurrence.total - tx.recurrence.current + 1;
+    if (confirm(`Excluir ${remaining} recorrência(s) (da ${tx.recurrence.current} até a ${tx.recurrence.total})?`)) {
+      await transactionRepository.deleteFutureRecurrences(tx);
+      document.body.removeChild(overlay);
+      await renderRoute();
+    }
+  });
+
+  const cancelBtn = createButton("Cancelar", { variant: "secondary" });
+  cancelBtn.addEventListener("click", () => {
+    document.body.removeChild(overlay);
+  });
+
+  btnContainer.append(deleteCurrentBtn, deleteFutureBtn, cancelBtn);
+  modal.append(title, description, btnContainer);
+  overlay.appendChild(modal);
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      document.body.removeChild(overlay);
+    }
+  });
+
+  document.body.appendChild(overlay);
 }
 
 async function openTransactionModal(tx = null) {
@@ -1028,7 +1355,8 @@ function detectCsvParser(headers) {
 }
 
 function getCategoryLabel(categoryId) {
-  const found = categories.find((item) => item.id === categoryId);
+  const allCategories = [...categories.gerais, ...categories.complementares];
+  const found = allCategories.find((item) => item.id === categoryId);
   return found ? found.label : "Sem categoria";
 }
 
@@ -1060,6 +1388,22 @@ function parseInstallment(description) {
   }
   const normalized = normalizeDescription(description);
   const match = normalized.match(/(?:parcela\s*)?(\d{1,2})\s*\/\s*(\d{1,2})/);
+  if (!match) {
+    return null;
+  }
+  const current = Number(match[1]);
+  const total = Number(match[2]);
+  if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 1) {
+    return null;
+  }
+  return { current, total };
+}
+
+function parseRecurrence(description) {
+  if (!description) {
+    return null;
+  }
+  const match = description.match(/\[REC:(\d{1,2})\/(\d{1,2})\]/);
   if (!match) {
     return null;
   }
@@ -1174,11 +1518,11 @@ function formatDateLabel(dateString) {
   return date.toLocaleDateString("pt-BR");
 }
 
-function getTransactionMeta(tx) {
+function getTransactionMeta(tx, cardName = null) {
   const category = getCategoryLabel(tx.categoryId);
   const metaParts = [];
-  if (tx.cardId) {
-    metaParts.push(`Cartão: ${tx.cardId}`);
+  if (cardName) {
+    metaParts.push(cardName);
   }
   if (tx.invoiceMonthKey) {
     metaParts.push(`Fatura: ${tx.invoiceMonthKey}`);
@@ -1195,7 +1539,7 @@ function sortByDateDesc(list) {
   });
 }
 
-function renderTransactionList(title, items, options = {}) {
+async function renderTransactionList(title, items, options = {}) {
   const wrapper = document.createElement("section");
   wrapper.className = "card";
   const heading = document.createElement("h2");
@@ -1212,6 +1556,11 @@ function renderTransactionList(title, items, options = {}) {
     return wrapper;
   }
 
+  // Buscar todos os cartões uma vez para criar um cache
+  const cards = await cardRepository.listCards();
+  const cardMap = new Map();
+  cards.forEach(card => cardMap.set(card.id, card.name));
+
   items.forEach((tx) => {
     const row = document.createElement("div");
     row.className = "transaction-row";
@@ -1222,9 +1571,41 @@ function renderTransactionList(title, items, options = {}) {
     const main = document.createElement("div");
     const titleLine = document.createElement("strong");
     titleLine.textContent = tx.description || "Sem descrição";
+    
+    // Indicador de parcela
+    if (tx.installment && tx.installment.current && tx.installment.total) {
+      const installmentBadge = document.createElement("span");
+      installmentBadge.className = "installment-badge";
+      installmentBadge.textContent = `${tx.installment.current}/${tx.installment.total}`;
+      installmentBadge.style.marginLeft = "0.5rem";
+      installmentBadge.style.fontSize = "0.75rem";
+      installmentBadge.style.fontWeight = "600";
+      installmentBadge.style.color = "var(--primary)";
+      installmentBadge.style.background = "var(--primary-light)";
+      installmentBadge.style.padding = "0.125rem 0.375rem";
+      installmentBadge.style.borderRadius = "var(--radius-sm)";
+      titleLine.appendChild(installmentBadge);
+    }
+    
+    // Indicador de recorrência
+    if (tx.recurrence && tx.recurrence.current && tx.recurrence.total) {
+      const recurrenceBadge = document.createElement("span");
+      recurrenceBadge.className = "recurrence-badge";
+      recurrenceBadge.textContent = `Rec ${tx.recurrence.current}/${tx.recurrence.total}`;
+      recurrenceBadge.style.marginLeft = "0.5rem";
+      recurrenceBadge.style.fontSize = "0.75rem";
+      recurrenceBadge.style.fontWeight = "600";
+      recurrenceBadge.style.color = "#059669";
+      recurrenceBadge.style.background = "#d1fae5";
+      recurrenceBadge.style.padding = "0.125rem 0.375rem";
+      recurrenceBadge.style.borderRadius = "var(--radius-sm)";
+      titleLine.appendChild(recurrenceBadge);
+    }
+    
     const metaLine = document.createElement("div");
     metaLine.className = "transaction-meta";
-    metaLine.textContent = `${getTransactionMeta(tx)} • ${formatDateLabel(tx.date)}`;
+    const cardName = tx.cardId ? cardMap.get(tx.cardId) || null : null;
+    metaLine.textContent = `${getTransactionMeta(tx, cardName)} • ${formatDateLabel(tx.date)}`;
     main.append(titleLine, metaLine);
 
     const amount = document.createElement("div");
@@ -1256,9 +1637,17 @@ function renderTransactionList(title, items, options = {}) {
     deleteBtn.setAttribute("aria-label", "Excluir");
     deleteBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
-      if (confirm(`Excluir "${tx.description}"?`)) {
-        await transactionRepository.deleteTransaction(tx.id);
-        await renderRoute();
+      
+      // Se for parcela ou recorrência, mostrar opções
+      if (tx.installment && tx.installment.groupId) {
+        showInstallmentDeleteModal(tx);
+      } else if (tx.recurrence && tx.recurrence.groupId) {
+        showRecurrenceDeleteModal(tx);
+      } else {
+        if (confirm(`Excluir "${tx.description}"?`)) {
+          await transactionRepository.deleteTransaction(tx.id);
+          await renderRoute();
+        }
       }
     });
 
@@ -1322,7 +1711,7 @@ function renderTransactionList(title, items, options = {}) {
   return wrapper;
 }
 
-function renderTransferSection(transfers, options = {}) {
+async function renderTransferSection(transfers, options = {}) {
   if (!transfers.length) {
     return null;
   }
@@ -1331,7 +1720,7 @@ function renderTransferSection(transfers, options = {}) {
   const summary = document.createElement("summary");
   summary.textContent = `Transferências (${transfers.length})`;
   details.append(summary);
-  const list = renderTransactionList("Transferências", transfers, options);
+  const list = await renderTransactionList("Transferências", transfers, options);
   const listBody = list.querySelector(".transaction-list");
   if (listBody) {
     details.append(listBody);
@@ -1396,15 +1785,21 @@ async function renderDashboard() {
     createStatCard("Saldo", balance, "balance", balanceIcon)
   );
 
-  // Resumo de transações recentes
-  const recentTransactions = sortByDateDesc(transactions).slice(0, 5);
-  const recentSection = renderTransactionList(
-    "Últimas transações",
-    recentTransactions,
+  // Card de Receitas
+  const incomeList = await renderTransactionList(
+    "Receitas do mês",
+    sortByDateDesc(income),
     { showActions: true }
   );
 
-  appView.append(summaryGrid, recentSection);
+  // Card de Despesas
+  const expenseList = await renderTransactionList(
+    "Despesas do mês",
+    sortByDateDesc(expenses),
+    { showActions: true }
+  );
+
+  appView.append(summaryGrid, incomeList, expenseList);
 }
 
 async function renderTransactions() {
@@ -1414,7 +1809,7 @@ async function renderTransactions() {
 
   const all = sortByDateDesc(transactions);
 
-  const list = renderTransactionList("Transações", all, {
+  const list = await renderTransactionList("Transações", all, {
     showActions: false,
   });
 
@@ -1671,57 +2066,70 @@ async function renderCards() {
     cardsSection.append(cardsHeader, cardsGrid);
   }
 
-  appView.append(cardForm, cardsSection);
+  appView.append(cardsSection, cardForm);
 }
 
 async function renderInvoices() {
   const cardId = getQueryParam("cardId");
   
-  // Seletor de cartões
+  // Cards de seleção de cartões
   const cards = await cardRepository.listCards();
-  const cardSelectorWrapper = document.createElement("div");
-  cardSelectorWrapper.className = "form-group";
   
-  const cardSelectorLabel = document.createElement("label");
-  cardSelectorLabel.textContent = "Filtrar por cartão";
-  cardSelectorLabel.style.fontWeight = "600";
-  cardSelectorLabel.style.marginBottom = "0.5rem";
-  cardSelectorLabel.style.display = "block";
+  if (!cards.length) {
+    const empty = createCard(
+      "Nenhum cartão cadastrado",
+      "Cadastre um cartão na página de Cartões para visualizar suas faturas."
+    );
+    appView.append(empty);
+    return;
+  }
   
-  const cardSelector = document.createElement("select");
-  cardSelector.className = "card-filter-select";
+  const cardsSection = document.createElement("section");
+  cardsSection.className = "card";
   
-  const defaultOption = document.createElement("option");
-  defaultOption.value = "";
-  defaultOption.textContent = "Selecione um cartão";
-  cardSelector.appendChild(defaultOption);
-  
+  const cardsHeader = document.createElement("div");
+  cardsHeader.className = "section-header";
+  const cardsTitle = document.createElement("h3");
+  cardsTitle.className = "section-title";
+  cardsTitle.textContent = "Selecione um cartão";
+  cardsHeader.append(cardsTitle);
+
+  const cardsGrid = document.createElement("div");
+  cardsGrid.className = "cards-grid";
+  cardsGrid.style.gridTemplateColumns = "repeat(auto-fill, minmax(280px, 1fr))";
+
   cards.forEach(card => {
-    const option = document.createElement("option");
-    option.value = card.id;
-    option.textContent = card.name;
-    if (card.id === cardId) {
-      option.selected = true;
-    }
-    cardSelector.appendChild(option);
+    const cardItem = document.createElement("button");
+    cardItem.className = "card-item";
+    cardItem.style.cursor = "pointer";
+    cardItem.style.border = card.id === cardId ? "2px solid var(--primary)" : "none";
+    cardItem.style.background = card.id === cardId ? "var(--primary-light)" : "var(--surface)";
+    
+    const title = document.createElement("h3");
+    title.textContent = card.name || "Cartão";
+    title.style.marginBottom = "0.5rem";
+    
+    const subtitle = document.createElement("div");
+    subtitle.style.fontSize = "0.875rem";
+    subtitle.style.color = "var(--text-secondary)";
+    subtitle.textContent = card.id === cardId ? "Selecionado" : "Clique para selecionar";
+    
+    cardItem.append(title, subtitle);
+    
+    cardItem.addEventListener("click", () => {
+      navigateTo(`#/app/invoices?cardId=${card.id}&m=${monthState.current}`);
+    });
+    
+    cardsGrid.append(cardItem);
   });
-  
-  cardSelector.addEventListener("change", async (e) => {
-    const selectedCardId = e.target.value;
-    if (selectedCardId) {
-      navigateTo(`#/app/invoices?cardId=${selectedCardId}`);
-    } else {
-      navigateTo(`#/app/invoices`);
-    }
-  });
-  
-  cardSelectorWrapper.append(cardSelectorLabel, cardSelector);
-  appView.append(cardSelectorWrapper);
+
+  cardsSection.append(cardsHeader, cardsGrid);
+  appView.append(cardsSection);
 
   if (!cardId) {
     const empty = createCard(
-      "Resumo das faturas abertas e pagas.",
-      "Use o seletor acima para escolher um cartão e visualizar suas faturas."
+      "Faturas",
+      "Selecione um cartão acima para visualizar suas faturas."
     );
     appView.append(empty);
     return;
@@ -1744,6 +2152,78 @@ async function renderInvoices() {
 
   const monthList = document.createElement("div");
   monthList.className = "invoice-months";
+  
+  // Container para conteúdo dinâmico
+  const dynamicContent = document.createElement("div");
+  
+  const renderInvoiceContent = async (selectedMonth) => {
+    dynamicContent.innerHTML = "";
+    
+    const invoiceTransactions = await transactionRepository.listInvoiceTransactions(
+      cardId,
+      selectedMonth
+    );
+    const invoiceItems = invoiceTransactions.filter((tx) =>
+      ["expense", "income"].includes(tx.kind)
+    );
+    const total = invoiceItems.reduce((sum, tx) => {
+      const value = Number(tx.amount) || 0;
+      return tx.kind === "income" ? sum - value : sum + value;
+    }, 0);
+
+    const meta = await cardRepository.getInvoiceMeta(cardId, selectedMonth);
+    const paid = Boolean(meta?.paid);
+
+    const invoiceSummary = document.createElement("section");
+    invoiceSummary.className = "card";
+    const summaryTitle = document.createElement("h2");
+    summaryTitle.textContent = `Fatura ${formatMonthLabel(selectedMonth)}`;
+    const totalLine = document.createElement("p");
+    totalLine.textContent = `Total: ${formatCurrency(total)}`;
+    const statusLine = document.createElement("p");
+    statusLine.textContent = `Status: ${paid ? "paga" : "aberta"}`;
+
+    const buttonContainer = document.createElement("div");
+    buttonContainer.style.display = "flex";
+    buttonContainer.style.gap = "0.75rem";
+
+    if (!paid) {
+      const payButton = createButton("Marcar como paga", {
+        onClick: async () => {
+          await cardRepository.setInvoicePaid(cardId, selectedMonth, {
+            paid: true,
+            totalCents: Math.round(total * 100),
+          });
+          await renderInvoiceContent(selectedMonth);
+        },
+      });
+      buttonContainer.append(payButton);
+    } else {
+      const unpayButton = createButton("Reabrir fatura", {
+        variant: "secondary",
+        onClick: async () => {
+          await cardRepository.setInvoicePaid(cardId, selectedMonth, {
+            paid: false,
+            totalCents: Math.round(total * 100),
+          });
+          await renderInvoiceContent(selectedMonth);
+        },
+      });
+      buttonContainer.append(unpayButton);
+    }
+
+    invoiceSummary.append(summaryTitle, totalLine, statusLine, buttonContainer);
+
+    const txList = await renderTransactionList(
+      "Transações da fatura",
+      sortByDateDesc(invoiceItems),
+      { showActions: true }
+    );
+
+    dynamicContent.append(invoiceSummary, txList);
+  };
+  
+  // Criar tabs de meses
   const monthKeys = getMonthSequence(monthState.current, 6);
   monthKeys.forEach((monthKey) => {
     const button = document.createElement("button");
@@ -1751,55 +2231,20 @@ async function renderInvoices() {
     button.className = "tab";
     button.textContent = formatMonthLabel(monthKey);
     button.classList.toggle("is-active", monthKey === monthState.current);
-    button.addEventListener("click", () => setMonth(monthKey));
+    button.addEventListener("click", async () => {
+      // Atualizar visual dos tabs
+      monthList.querySelectorAll(".tab").forEach(tab => tab.classList.remove("is-active"));
+      button.classList.add("is-active");
+      // Renderizar conteúdo do mês selecionado
+      await renderInvoiceContent(monthKey);
+    });
     monthList.append(button);
   });
+  
+  // Renderizar conteúdo inicial
+  await renderInvoiceContent(monthState.current);
 
-  const invoiceTransactions = await transactionRepository.listInvoiceTransactions(
-    cardId,
-    monthState.current
-  );
-  const invoiceItems = invoiceTransactions.filter((tx) =>
-    ["expense", "income"].includes(tx.kind)
-  );
-  const total = invoiceItems.reduce((sum, tx) => {
-    const value = Number(tx.amount) || 0;
-    return tx.kind === "income" ? sum - value : sum + value;
-  }, 0);
-
-  const meta = await cardRepository.getInvoiceMeta(cardId, monthState.current);
-  const paid = Boolean(meta?.paid);
-
-  const invoiceSummary = document.createElement("section");
-  invoiceSummary.className = "card";
-  const summaryTitle = document.createElement("h2");
-  summaryTitle.textContent = `Fatura ${formatMonthLabel(monthState.current)}`;
-  const totalLine = document.createElement("p");
-  totalLine.textContent = `Total: ${formatCurrency(total)}`;
-  const statusLine = document.createElement("p");
-  statusLine.textContent = `Status: ${paid ? "paga" : "aberta"}`;
-
-  const payButton = createButton("Marcar como paga", {
-    variant: paid ? "secondary" : undefined,
-    onClick: async () => {
-      await cardRepository.setInvoicePaid(cardId, monthState.current, {
-        paid: true,
-        totalCents: Math.round(total * 100),
-      });
-      await renderRoute();
-    },
-  });
-  payButton.disabled = paid;
-
-  invoiceSummary.append(summaryTitle, totalLine, statusLine, payButton);
-
-  const txList = renderTransactionList(
-    "Transações da fatura",
-    sortByDateDesc(invoiceItems),
-    { showActions: true }
-  );
-
-  appView.append(cardTitle, monthList, invoiceSummary, txList);
+  appView.append(cardTitle, monthList, dynamicContent);
 }
 
 function isRowImportable(row) {
@@ -1927,10 +2372,10 @@ function renderImportRow(row) {
       ? row.txCandidate.amount
       : "";
 
-  const categoryField = createSelect(
+  const categoryField = createSelectWithGroups(
     "Categoria",
     "categoryId",
-    categories.map((item) => ({ value: item.id, label: item.label }))
+    categories
   );
   categoryField.select.required = false;
   categoryField.select.value = row.txCandidate?.categoryId || "";
@@ -2011,9 +2456,188 @@ function computeImportCounts(rows) {
   return counts;
 }
 
+// Funções de Backup e Manutenção
+async function downloadUserBackup() {
+  const uid = authState.user?.uid;
+  if (!uid) throw new Error("Usuário não autenticado");
+  
+  const userDataRef = ref(db, `/users/${uid}`);
+  const snapshot = await get(userDataRef);
+  
+  if (!snapshot.exists()) {
+    throw new Error("Nenhum dado encontrado");
+  }
+  
+  const backup = {
+    version: "1.0",
+    exportedAt: new Date().toISOString(),
+    userId: uid,
+    data: snapshot.val()
+  };
+  
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `pvault-backup-${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function restoreUserBackup(file) {
+  const uid = authState.user?.uid;
+  if (!uid) throw new Error("Usuário não autenticado");
+  
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const backup = JSON.parse(e.target.result);
+        
+        if (!backup.version || !backup.data) {
+          throw new Error("Formato de backup inválido");
+        }
+        
+        // Restaurar dados
+        const userDataRef = ref(db, `/users/${uid}`);
+        await set(userDataRef, backup.data);
+        
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.onerror = () => reject(new Error("Erro ao ler arquivo"));
+    reader.readAsText(file);
+  });
+}
+
+async function deleteAllTransactions() {
+  const uid = authState.user?.uid;
+  if (!uid) throw new Error("Usuário não autenticado");
+  
+  const updates = {};
+  updates[`/users/${uid}/tx`] = null;
+  updates[`/users/${uid}/txByMonth`] = null;
+  updates[`/users/${uid}/cardTxByInvoice`] = null;
+  
+  await update(ref(db), updates);
+}
+
+async function deleteEverything() {
+  const uid = authState.user?.uid;
+  if (!uid) throw new Error("Usuário não autenticado");
+  
+  const userDataRef = ref(db, `/users/${uid}`);
+  await set(userDataRef, null);
+}
+
 async function renderImport() {
   appView.innerHTML = "";
+  
+  // Seção de Backup e Restauração
+  const backupCard = document.createElement("section");
+  backupCard.className = "card";
+  const backupTitle = document.createElement("h2");
+  backupTitle.textContent = "Backup e Restauração";
+  const backupDesc = document.createElement("p");
+  backupDesc.textContent = "Faça backup de todos os seus dados ou restaure um backup anterior.";
+  backupDesc.style.marginBottom = "1rem";
+  backupDesc.style.color = "var(--text-secondary)";
+  
+  const backupActions = document.createElement("div");
+  backupActions.className = "actions";
+  backupActions.style.gap = "0.75rem";
+  
+  const downloadBackupBtn = createButton("Baixar Backup", { variant: "secondary" });
+  downloadBackupBtn.addEventListener("click", async () => {
+    try {
+      await downloadUserBackup();
+    } catch (error) {
+      alert("Erro ao gerar backup: " + error.message);
+    }
+  });
+  
+  const restoreBackupBtn = createButton("Restaurar Backup", { variant: "secondary" });
+  const restoreInput = document.createElement("input");
+  restoreInput.type = "file";
+  restoreInput.accept = ".json";
+  restoreInput.style.display = "none";
+  restoreInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    if (confirm("Restaurar backup? Isso irá SUBSTITUIR todos os dados atuais!")) {
+      try {
+        await restoreUserBackup(file);
+        alert("Backup restaurado com sucesso!");
+        await renderRoute();
+      } catch (error) {
+        alert("Erro ao restaurar backup: " + error.message);
+      }
+    }
+    restoreInput.value = "";
+  });
+  
+  restoreBackupBtn.addEventListener("click", () => restoreInput.click());
+  
+  backupActions.append(downloadBackupBtn, restoreBackupBtn, restoreInput);
+  backupCard.append(backupTitle, backupDesc, backupActions);
+  
+  // Seção de Manutenção
+  const maintenanceCard = document.createElement("section");
+  maintenanceCard.className = "card";
+  const maintenanceTitle = document.createElement("h2");
+  maintenanceTitle.textContent = "Manutenção";
+  const maintenanceDesc = document.createElement("p");
+  maintenanceDesc.textContent = "Ferramentas para gerenciar seus dados.";
+  maintenanceDesc.style.marginBottom = "1rem";
+  maintenanceDesc.style.color = "var(--text-secondary)";
+  
+  const maintenanceActions = document.createElement("div");
+  maintenanceActions.className = "actions";
+  maintenanceActions.style.gap = "0.75rem";
+  maintenanceActions.style.flexDirection = "column";
+  
+  const deleteTransactionsBtn = createButton("Apagar Todas as Transações", { variant: "secondary" });
+  deleteTransactionsBtn.addEventListener("click", async () => {
+    if (confirm("Tem certeza? Isso irá apagar TODAS as transações!")) {
+      if (confirm("Última confirmação: apagar todas as transações?")) {
+        try {
+          await deleteAllTransactions();
+          alert("Todas as transações foram apagadas.");
+          await renderRoute();
+        } catch (error) {
+          alert("Erro ao apagar transações: " + error.message);
+        }
+      }
+    }
+  });
+  
+  const deleteEverythingBtn = createButton("Apagar Tudo (Backup Automático)", { variant: "secondary" });
+  deleteEverythingBtn.style.background = "linear-gradient(135deg, var(--danger) 0%, #dc2626 100%)";
+  deleteEverythingBtn.style.color = "white";
+  deleteEverythingBtn.addEventListener("click", async () => {
+    if (confirm("ATENÇÃO: Isso irá apagar TODOS os dados! Um backup será gerado automaticamente.")) {
+      if (confirm("CONFIRMAÇÃO FINAL: Apagar absolutamente tudo?")) {
+        try {
+          await downloadUserBackup(); // Backup automático
+          await deleteEverything();
+          alert("Todos os dados foram apagados. Backup foi salvo.");
+          navigateTo("#/login");
+        } catch (error) {
+          alert("Erro ao apagar dados: " + error.message);
+        }
+      }
+    }
+  });
+  
+  maintenanceActions.append(deleteTransactionsBtn, deleteEverythingBtn);
+  maintenanceCard.append(maintenanceTitle, maintenanceDesc, maintenanceActions);
 
+  // Seção de Importação CSV (original)
   const uploadCard = document.createElement("section");
   uploadCard.className = "card";
   const uploadTitle = document.createElement("h2");
@@ -2044,7 +2668,7 @@ async function renderImport() {
   uploadCard.append(uploadTitle, uploadInput);
 
   if (!importState.files.length) {
-    appView.append(uploadCard, createCard("Nenhum arquivo", "Envie um CSV para começar."));
+    appView.append(backupCard, maintenanceCard, uploadCard, createCard("Nenhum arquivo", "Envie um CSV para começar."));
     return;
   }
 
@@ -2119,7 +2743,7 @@ async function renderImport() {
   });
   actionBar.append(importButton);
 
-  appView.append(uploadCard, fileTabs, statusTabs, stats, list, actionBar);
+  appView.append(backupCard, maintenanceCard, uploadCard, fileTabs, statusTabs, stats, list, actionBar);
 
   if (importState.summary) {
     const summaryCard = document.createElement("section");
@@ -2147,6 +2771,23 @@ async function renderRoute() {
   if (routeKey === "#/login") {
     renderLogin();
     return;
+  }
+  
+  // Restaurar top-bar e month-toolbar quando não estiver no login
+  const topBar = document.querySelector('.top-bar');
+  const monthToolbar = document.getElementById('month-toolbar');
+  const appView = document.getElementById('app-view');
+  
+  if (topBar) topBar.style.display = '';
+  if (monthToolbar) monthToolbar.style.display = '';
+  if (appView) {
+    appView.style.maxWidth = '';
+    appView.style.margin = '';
+    appView.style.paddingTop = '';
+    appView.style.minHeight = '';
+    appView.style.display = '';
+    appView.style.alignItems = '';
+    appView.style.justifyContent = '';
   }
 
   if (routeKey.startsWith("#/app/") && !authState.user) {
@@ -2466,9 +3107,53 @@ function createTransactionRepository(cardRepo) {
       withSuggestion.categoryId = suggestCategory(withSuggestion);
     }
     const installment = parseInstallment(withSuggestion.description);
+    const recurrence = parseRecurrence(withSuggestion.description);
     const monthKey = withSuggestion.monthKey;
     const baseInvoiceMonth = withSuggestion.invoiceMonthKey || monthKey;
 
+    // Processar recorrência (receitas)
+    if (recurrence && recurrence.current >= 1 && withSuggestion.kind === "income") {
+      const amountCents = Math.round((Number(withSuggestion.amount) || 0) * 100);
+      const groupId = hashString([
+        withSuggestion.description,
+        withSuggestion.date,
+        amountCents,
+        recurrence.total,
+      ].join("|"));
+      
+      // Remover notação de recorrência da descrição
+      const cleanDescription = withSuggestion.description.replace(/\s*\[REC:\d{1,2}\/\d{1,2}\]\s*$/i, '').trim();
+      
+      const updates = {};
+      const recomputeTargets = new Set();
+
+      for (let index = recurrence.current; index <= recurrence.total; index += 1) {
+        const offset = index - recurrence.current;
+        const monthForRecurrence = addMonths(monthKey, offset);
+        
+        const txRef = push(ref(db, `/users/${uid}/tx`));
+        const txId = txRef.key;
+        const payload = stripUndefined({
+          ...withSuggestion,
+          description: cleanDescription,
+          id: txId,
+          amount: amountCents / 100,
+          monthKey: monthForRecurrence,
+          isProjected: offset > 0,
+          recurrence: {
+            current: index,
+            total: recurrence.total,
+            groupId,
+          },
+        });
+        Object.assign(updates, buildTransactionUpdates(uid, txId, payload));
+      }
+
+      await update(ref(db), updates);
+      return { ...withSuggestion };
+    }
+
+    // Processar parcelamento (despesas com cartão)
     if (installment && installment.current >= 1) {
       const amountCents = Math.round((Number(withSuggestion.amount) || 0) * 100);
       const perInstallment = Math.floor(amountCents / installment.total);
@@ -2476,6 +3161,11 @@ function createTransactionRepository(cardRepo) {
       const groupId = buildInstallmentGroupId(withSuggestion, installment);
       const updates = {};
       const recomputeTargets = new Set();
+      
+      // Remover notação de parcela da descrição original
+      const cleanDescription = (withSuggestion.description || '')
+        .replace(/\s*\d{1,2}\s*\/\s*\d{1,2}\s*$/i, '')
+        .trim();
 
       for (let index = installment.current; index <= installment.total; index += 1) {
         const offset = index - installment.current;
@@ -2489,6 +3179,7 @@ function createTransactionRepository(cardRepo) {
         const txId = txRef.key;
         const payload = stripUndefined({
           ...withSuggestion,
+          description: cleanDescription,
           id: txId,
           amount: installmentCents / 100,
           monthKey: monthForInstallment,
@@ -2621,6 +3312,82 @@ function createTransactionRepository(cardRepo) {
     }
   }
 
+  async function deleteFutureInstallments(tx) {
+    const uid = getUserId();
+    const groupId = tx.installment?.groupId;
+    if (!groupId) return;
+
+    // Buscar todas as transações
+    const allTxRef = ref(db, `/users/${uid}/tx`);
+    const snapshot = await get(allTxRef);
+    if (!snapshot.exists()) return;
+
+    const allTransactions = snapshot.val();
+    const updates = {};
+    const recomputeTargets = new Set();
+
+    // Encontrar e deletar esta parcela e todas as futuras do mesmo grupo
+    Object.entries(allTransactions).forEach(([id, transaction]) => {
+      if (
+        transaction.installment?.groupId === groupId &&
+        transaction.installment?.current >= tx.installment.current
+      ) {
+        updates[`/users/${uid}/tx/${id}`] = null;
+        
+        if (transaction.monthKey) {
+          updates[`/users/${uid}/txByMonth/${transaction.monthKey}/${id}`] = null;
+        }
+        
+        if (transaction.cardId && transaction.invoiceMonthKey) {
+          updates[
+            `/users/${uid}/cardTxByInvoice/${transaction.cardId}/${transaction.invoiceMonthKey}/${id}`
+          ] = null;
+          recomputeTargets.add(`${transaction.cardId}::${transaction.invoiceMonthKey}`);
+        }
+      }
+    });
+
+    await update(ref(db), updates);
+    
+    // Recomputar faturas afetadas
+    await Promise.all(
+      Array.from(recomputeTargets).map((key) => {
+        const [cardId, invoiceMonthKey] = key.split("::");
+        return cardRepo.recomputeInvoiceMeta(cardId, invoiceMonthKey);
+      })
+    );
+  }
+
+  async function deleteFutureRecurrences(tx) {
+    const uid = getUserId();
+    const groupId = tx.recurrence?.groupId;
+    if (!groupId) return;
+
+    // Buscar todas as transações
+    const allTxRef = ref(db, `/users/${uid}/tx`);
+    const snapshot = await get(allTxRef);
+    if (!snapshot.exists()) return;
+
+    const allTransactions = snapshot.val();
+    const updates = {};
+
+    // Encontrar e deletar esta recorrência e todas as futuras do mesmo grupo
+    Object.entries(allTransactions).forEach(([id, transaction]) => {
+      if (
+        transaction.recurrence?.groupId === groupId &&
+        transaction.recurrence?.current >= tx.recurrence.current
+      ) {
+        updates[`/users/${uid}/tx/${id}`] = null;
+        
+        if (transaction.monthKey) {
+          updates[`/users/${uid}/txByMonth/${transaction.monthKey}/${id}`] = null;
+        }
+      }
+    });
+
+    await update(ref(db), updates);
+  }
+
   async function listMonthTransactions(monthKey) {
     const uid = getUserId();
     const listRef = ref(db, `/users/${uid}/txByMonth/${monthKey}`);
@@ -2662,6 +3429,8 @@ function createTransactionRepository(cardRepo) {
     createTransaction,
     updateTransaction,
     deleteTransaction,
+    deleteFutureInstallments,
+    deleteFutureRecurrences,
     listMonthTransactions,
     listInvoiceTransactions,
   };

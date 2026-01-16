@@ -15,6 +15,7 @@ import {
   push,
   update,
   get,
+  set,
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
 const firebaseConfig = {
@@ -31,16 +32,16 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-function signIn(email, password, rememberMe = false) {
+async function signIn(email, password, rememberMe = true) {
   const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
-  return setPersistence(auth, persistence)
-    .then(() => signInWithEmailAndPassword(auth, email, password));
+  await setPersistence(auth, persistence);
+  return signInWithEmailAndPassword(auth, email, password);
 }
 
-function signUp(email, password, rememberMe = false) {
+async function signUp(email, password, rememberMe = true) {
   const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
-  return setPersistence(auth, persistence)
-    .then(() => createUserWithEmailAndPassword(auth, email, password));
+  await setPersistence(auth, persistence);
+  return createUserWithEmailAndPassword(auth, email, password);
 }
 
 function onAuthChange(callback) {
@@ -58,6 +59,7 @@ export {
   push,
   update,
   get,
+  set,
   signIn,
   signUp,
   onAuthChange,
