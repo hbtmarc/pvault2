@@ -5,6 +5,9 @@ import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
   signOut,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 import {
   getDatabase,
@@ -28,12 +31,16 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-function signIn(email, password) {
-  return signInWithEmailAndPassword(auth, email, password);
+function signIn(email, password, rememberMe = false) {
+  const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+  return setPersistence(auth, persistence)
+    .then(() => signInWithEmailAndPassword(auth, email, password));
 }
 
-function signUp(email, password) {
-  return createUserWithEmailAndPassword(auth, email, password);
+function signUp(email, password, rememberMe = false) {
+  const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+  return setPersistence(auth, persistence)
+    .then(() => createUserWithEmailAndPassword(auth, email, password));
 }
 
 function onAuthChange(callback) {
@@ -55,4 +62,7 @@ export {
   signUp,
   onAuthChange,
   signOutUser,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
 };

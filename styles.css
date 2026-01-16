@@ -95,22 +95,28 @@ body {
   color: var(--text-secondary);
   border: none;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   background: transparent;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   white-space: nowrap;
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
 }
 
 .tab.is-active {
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
   color: white;
+  box-shadow: 0 2px 8px 0 rgba(79, 70, 229, 0.25),
+              0 1px 3px 0 rgba(79, 70, 229, 0.15);
 }
 
 .tab:hover:not(.is-active) {
   background: var(--primary-light);
   color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px 0 rgba(79, 70, 229, 0.1);
 }
 
 .month-toolbar {
@@ -118,34 +124,59 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  background: var(--surface);
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  width: 50%;
+  margin: 0 auto;
 }
 
 #month-toolbar {
   grid-area: month;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+  display: flex;
+  justify-content: center;
 }
 
 .month-nav-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border-radius: var(--radius-full);
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 1.125rem;
-  line-height: 1;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.month-nav-button svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .month-nav-button:hover {
   background: var(--primary-light);
+  border-color: var(--primary);
   color: var(--primary);
-  transform: none;
-  box-shadow: none;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px 0 rgba(79, 70, 229, 0.15);
+}
+
+.month-nav-button:hover svg {
+  transform: scale(1.1);
+}
+
+.month-nav-button:active {
+  transform: scale(0.95);
 }
 
 .month-nav-button:active {
@@ -162,25 +193,6 @@ body {
   padding: 0.375rem 0.75rem;
   border-radius: var(--radius-sm);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  text-transform: capitalize;
-}
-
-.month-display:hover {
-  background: var(--surface-hover);
-  color: var(--primary);
-}
-
-.month-picker {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-  width: 1px;
-  height: 1px;
-}
-
-.month-controls {
-  display: none;
-}
   text-transform: capitalize;
 }
 
@@ -225,6 +237,12 @@ button.secondary,
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+button.secondary::before,
+.button.secondary::before {
+  display: none;
 }
 
 button.ghost,
@@ -249,8 +267,14 @@ button.small,
 
 button:hover,
 .button:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.35),
+              0 2px 6px 0 rgba(79, 70, 229, 0.2);
+}
+
+button:hover::before,
+.button:hover::before {
+  opacity: 1;
 }
 
 button:active,
@@ -262,6 +286,9 @@ button.secondary:hover,
 .button.secondary:hover {
   background: var(--surface-hover);
   border-color: var(--border-strong);
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.08),
+              0 2px 4px 0 rgba(0, 0, 0, 0.05);
+  transform: translateY(-2px);
 }
 
 button.ghost:hover,
@@ -304,6 +331,19 @@ textarea {
   background: var(--surface);
   color: var(--text);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+select {
+  cursor: pointer;
+  padding-right: 2.5rem;
+  background-image: url('data:image/svg+xml;charset=UTF-8,<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6L8 10L12 6" stroke="%2394a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
 }
 
 input::placeholder,
@@ -315,7 +355,26 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-light);
+  box-shadow: 0 0 0 3px var(--primary-light), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+select:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+}
+
+select option {
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9375rem;
+}
+
+select option:hover,
+select option:checked {
+  background: linear-gradient(135deg, var(--primary-light) 0%, #e0e7ff 100%);
+  color: var(--primary);
+  font-weight: 500;
 }
 
 .view-container {
@@ -363,6 +422,14 @@ textarea:focus {
   margin-top: 0.5rem;
 }
 
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .summary-grid {
   display: grid;
   gap: 0.75rem;
@@ -383,12 +450,15 @@ textarea:focus {
   flex-direction: column;
   gap: 0.5rem;
   background: var(--surface);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  z-index: 2;
+  cursor: grab;
+  user-select: none;
 }
 
 .card-item:active {
-  transform: scale(0.98);
-  background: var(--surface-hover);
+  cursor: grabbing;
 }
 
 .card-item h3 {
@@ -411,6 +481,19 @@ textarea:focus {
   font-weight: 700;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+}
+
+.card-actions-hidden {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  z-index: 1;
 }
 
 .invoice-months {
@@ -506,9 +589,58 @@ textarea:focus {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 0.75rem;
-  padding: 1rem 0;
+  padding: 0;
   border-bottom: 1px solid var(--border);
   align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.transaction-content {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  padding: 1rem 0;
+  align-items: center;
+  background: var(--surface);
+  position: relative;
+  z-index: 2;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.transaction-actions-hidden {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  z-index: 1;
+}
+
+.transaction-actions-hidden .icon-button {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  font-size: 1.25rem;
+}
+
+.transaction-actions-hidden .icon-button.danger {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.transaction-actions-hidden .icon-button.danger:hover,
+.icon-button.danger:hover {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+  box-shadow: 0 4px 12px 0 rgba(239, 68, 68, 0.3),
+              0 2px 4px 0 rgba(239, 68, 68, 0.2);
 }
 
 .transaction-row:last-child {
@@ -560,25 +692,98 @@ textarea:focus {
 }
 
 .stat-card {
+  position: relative;
+  overflow: hidden;
   text-align: center;
-  padding: 1.5rem 1rem;
+  padding: 1.75rem 1.25rem;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-hover) 100%);
+  border: 1px solid var(--border);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary) 0%, #6366f1 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px -4px rgba(79, 70, 229, 0.15);
+  border-color: var(--primary-light);
+}
+
+.stat-card:hover::before {
+  opacity: 1;
+}
+
+.stat-card.income::before {
+  background: linear-gradient(90deg, var(--success) 0%, #34d399 100%);
+}
+
+.stat-card.expense::before {
+  background: linear-gradient(90deg, var(--danger) 0%, #f87171 100%);
+}
+
+.stat-card.balance::before {
+  background: linear-gradient(90deg, var(--primary) 0%, #6366f1 100%);
 }
 
 .stat-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.5rem;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.75rem;
 }
 
 .stat-value {
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-size: 2rem;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   color: var(--text);
+  line-height: 1;
+}
+
+.stat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 1rem auto;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--primary-light) 0%, #e0e7ff 100%);
+}
+
+.stat-icon svg {
+  width: 24px;
+  height: 24px;
+  color: var(--primary);
+}
+
+.stat-card.income .stat-icon {
+  background: linear-gradient(135deg, var(--success-bg) 0%, #d1fae5 100%);
+}
+
+.stat-card.income .stat-icon svg {
+  color: var(--success);
+}
+
+.stat-card.expense .stat-icon {
+  background: linear-gradient(135deg, var(--danger-bg) 0%, #fee2e2 100%);
+}
+
+.stat-card.expense .stat-icon svg {
+  color: var(--danger);
 }
 
 .stat-value.positive {
@@ -805,23 +1010,40 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   border-radius: var(--radius-full);
-  background: transparent;
+  background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+.icon-button svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .icon-button:hover {
   background: var(--surface-hover);
-  border-color: var(--border-strong);
-  color: var(--text);
-  transform: none;
-  box-shadow: none;
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: scale(1.1) translateY(-1px);
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.1),
+              0 2px 4px 0 rgba(0, 0, 0, 0.06);
+}
+
+.icon-button:hover svg {
+  transform: scale(1.1);
+}
+
+.icon-button:active {
+  transform: scale(0.95);
 }
 
 .icon-button.primary {
@@ -838,31 +1060,57 @@ textarea:focus {
 .fab {
   position: fixed;
   bottom: 1.5rem;
-  right: 1.5rem;
-  width: 56px;
-  height: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 64px;
+  height: 64px;
   border-radius: var(--radius-full);
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
   color: white;
   border: none;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.4),
+              0 8px 24px 0 rgba(79, 70, 229, 0.2);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
-  font-weight: 300;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 10;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 100;
+  isolation: isolate;
+}
+
+.fab::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%);
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fab svg {
+  display: block;
+  width: 28px;
+  height: 28px;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
 }
 
 .fab:hover {
-  transform: scale(1.1);
-  box-shadow: var(--shadow-xl);
+  transform: translateX(-50%) scale(1.08) translateY(-2px);
+  box-shadow: 0 8px 20px 0 rgba(79, 70, 229, 0.5),
+              0 12px 32px 0 rgba(79, 70, 229, 0.3);
+}
+
+.fab:hover::before {
+  opacity: 1;
 }
 
 .fab:active {
-  transform: scale(0.95);
+  transform: translateX(-50%) scale(0.96);
+  transition-duration: 0.1s;
 }
 
 @media (min-width: 768px) {

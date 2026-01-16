@@ -74,10 +74,37 @@ const monthToolbar = document.getElementById("month-toolbar");
 const topTabs = document.getElementById("top-tabs");
 const appView = document.getElementById("app-view");
 let transactionModal = null;
+let cardModal = null;
 const importState = {
   files: [],
   activeFileId: null,
   summary: null,
+};
+
+// Helper para criar ícones SVG do Fluent Icons
+function createFluentIcon(pathData, size = 20, className = "") {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", size);
+  svg.setAttribute("height", size);
+  svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+  svg.setAttribute("fill", "currentColor");
+  if (className) svg.setAttribute("class", className);
+  
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", pathData);
+  svg.appendChild(path);
+  
+  return svg;
+}
+
+// Biblioteca de ícones Fluent (paths otimizados para 20x20)
+const FluentIcons = {
+  ChevronLeft: "M13.3536 16.3536C13.5488 16.1583 13.5488 15.8417 13.3536 15.6464L7.70711 10L13.3536 4.35355C13.5488 4.15829 13.5488 3.84171 13.3536 3.64645C13.1583 3.45118 12.8417 3.45118 12.6464 3.64645L6.64645 9.64645C6.45118 9.84171 6.45118 10.1583 6.64645 10.3536L12.6464 16.3536C12.8417 16.5488 13.1583 16.5488 13.3536 16.3536Z",
+  ChevronRight: "M7.64645 3.64645C7.45118 3.84171 7.45118 4.15829 7.64645 4.35355L13.2929 10L7.64645 15.6464C7.45118 15.8417 7.45118 16.1583 7.64645 16.3536C7.84171 16.5488 8.15829 16.5488 8.35355 16.3536L14.3536 10.3536C14.5488 10.1583 14.5488 9.84171 14.3536 9.64645L8.35355 3.64645C8.15829 3.45118 7.84171 3.45118 7.64645 3.64645Z",
+  Dismiss: "M4.08859 4.21569C3.87466 4.00176 3.53009 4.00176 3.31616 4.21569C3.10223 4.42962 3.10223 4.77419 3.31616 4.98812L9.32804 11L3.31616 17.0119C3.10223 17.2258 3.10223 17.5704 3.31616 17.7843C3.53009 17.9982 3.87466 17.9982 4.08859 17.7843L10.1005 11.7724L16.1124 17.7843C16.3263 17.9982 16.6709 17.9982 16.8848 17.7843C17.0987 17.5704 17.0987 17.2258 16.8848 17.0119L10.8729 11L16.8848 4.98812C17.0987 4.77419 17.0987 4.42962 16.8848 4.21569C16.6709 4.00176 16.3263 4.00176 16.1124 4.21569L10.1005 10.2276L4.08859 4.21569Z",
+  Edit: "M17.7266 2.27344C16.5718 1.11862 14.678 1.11862 13.5232 2.27344L2.92453 12.8721C2.63906 13.1576 2.44524 13.5214 2.36858 13.918L1.51652 17.846C1.38311 18.4993 1.92313 19.0393 2.57645 18.906L6.50405 18.0539C6.90063 17.9773 7.26445 17.7834 7.54992 17.498L18.1486 6.89932C19.3034 5.7445 19.3034 3.8507 18.1486 2.69588L17.7266 2.27344ZM14.2303 2.98055C15.0006 2.21026 16.2491 2.21026 17.0194 2.98055L17.4415 3.40299C18.2118 4.17328 18.2118 5.42182 17.4415 6.19211L16.7595 6.87413L13.5483 3.66289L14.2303 2.98055ZM12.8412 4.37L16.0524 7.58124L6.84281 16.7908C6.69203 16.9416 6.49866 17.0424 6.28787 17.0797L3.0699 17.7482L3.73843 14.5302C3.77573 14.3194 3.87647 14.126 4.02725 13.9753L12.8412 4.37Z",
+  Delete: "M8.5 3C8.22386 3 8 3.22386 8 3.5C8 3.77614 8.22386 4 8.5 4H11.5C11.7761 4 12 3.77614 12 3.5C12 3.22386 11.7761 3 11.5 3H8.5ZM4 5C3.72386 5 3.5 5.22386 3.5 5.5C3.5 5.77614 3.72386 6 4 6H16C16.2761 6 16.5 5.77614 16.5 5.5C16.5 5.22386 16.2761 5 16 5H4ZM5.5 7C5.77614 7 6 7.22386 6 7.5V16.5C6 17.3284 6.67157 18 7.5 18H12.5C13.3284 18 14 17.3284 14 16.5V7.5C14 7.22386 14.2239 7 14.5 7C14.7761 7 15 7.22386 15 7.5V16.5C15 17.8807 13.8807 19 12.5 19H7.5C6.11929 19 5 17.8807 5 16.5V7.5C5 7.22386 5.22386 7 5.5 7ZM9 9.5C9 9.22386 8.77614 9 8.5 9C8.22386 9 8 9.22386 8 9.5V15.5C8 15.7761 8.22386 16 8.5 16C8.77614 16 9 15.7761 9 15.5V9.5ZM11.5 9C11.7761 9 12 9.22386 12 9.5V15.5C12 15.7761 11.7761 16 11.5 16C11.2239 16 11 15.7761 11 15.5V9.5C11 9.22386 11.2239 9 11.5 9Z",
+  Add: "M10 3C10.2761 3 10.5 3.22386 10.5 3.5V9.5H16.5C16.7761 9.5 17 9.72386 17 10C17 10.2761 16.7761 10.5 16.5 10.5H10.5V16.5C10.5 16.7761 10.2761 17 10 17C9.72386 17 9.5 16.7761 9.5 16.5V10.5H3.5C3.22386 10.5 3 10.2761 3 10C3 9.72386 3.22386 9.5 3.5 9.5H9.5V3.5C9.5 3.22386 9.72386 3 10 3Z"
 };
 
 function createButton(label, options = {}) {
@@ -126,6 +153,7 @@ function createInput(labelText, type, name) {
   input.type = type;
   input.name = name;
   input.required = true;
+  input.autocomplete = type === "email" ? "email" : type === "password" ? "current-password" : "off";
   wrapper.append(label, input);
   return { wrapper, input };
 }
@@ -219,7 +247,7 @@ function createMonthToolbar() {
   const prevButton = document.createElement("button");
   prevButton.className = "month-nav-button";
   prevButton.setAttribute("aria-label", "Mês anterior");
-  prevButton.innerHTML = "‹";
+  prevButton.appendChild(createFluentIcon(FluentIcons.ChevronLeft));
   prevButton.addEventListener("click", goPrev);
 
   const display = document.createElement("div");
@@ -249,7 +277,7 @@ function createMonthToolbar() {
   const nextButton = document.createElement("button");
   nextButton.className = "month-nav-button";
   nextButton.setAttribute("aria-label", "Próximo mês");
-  nextButton.innerHTML = "›";
+  nextButton.appendChild(createFluentIcon(FluentIcons.ChevronRight));
   nextButton.addEventListener("click", goNext);
 
   monthToolbar.append(prevButton, display, picker, nextButton);
@@ -275,7 +303,13 @@ function getMonthFromUrl() {
 }
 
 function getQueryParam(key) {
-  const params = new URLSearchParams(window.location.search);
+  // Extrair query params do hash (#/app/invoices?cardId=...)
+  const hash = window.location.hash;
+  const queryStart = hash.indexOf('?');
+  if (queryStart === -1) return null;
+  
+  const queryString = hash.substring(queryStart + 1);
+  const params = new URLSearchParams(queryString);
   return params.get(key);
 }
 
@@ -316,11 +350,6 @@ function renderMonthToolbar() {
 function renderLogin() {
   appView.innerHTML = "";
 
-  const container = document.createElement("div");
-  container.style.maxWidth = "420px";
-  container.style.margin = "3rem auto 0";
-  container.style.padding = "0 1rem";
-
   const card = createCard(
     "Entrar no PVault",
     "Controle suas finanças de forma simples."
@@ -332,6 +361,15 @@ function renderLogin() {
   const emailField = createInput("Email", "email", "email");
   const passwordField = createInput("Senha", "password", "password");
 
+  const rememberMeLabel = document.createElement("label");
+  rememberMeLabel.className = "checkbox";
+  const rememberMeCheckbox = document.createElement("input");
+  rememberMeCheckbox.type = "checkbox";
+  rememberMeCheckbox.checked = true;
+  const rememberMeText = document.createElement("span");
+  rememberMeText.textContent = "Manter conectado por 7 dias";
+  rememberMeLabel.append(rememberMeCheckbox, rememberMeText);
+
   const feedback = document.createElement("p");
   feedback.className = "form-feedback";
   feedback.textContent = "";
@@ -340,7 +378,7 @@ function renderLogin() {
   actionRow.className = "actions";
   actionRow.style.gap = "0.5rem";
 
-  const loginButton = createButton("Entrar", { type: "button" });
+  const loginButton = createButton("Entrar", { type: "submit" });
   loginButton.style.flex = "1";
   
   const registerButton = createButton("Criar conta", {
@@ -353,6 +391,7 @@ function renderLogin() {
     feedback.textContent = "";
     const email = emailField.input.value.trim();
     const password = passwordField.input.value.trim();
+    const rememberMe = rememberMeCheckbox.checked;
 
     if (!email || !password) {
       feedback.textContent = "Informe email e senha.";
@@ -361,9 +400,9 @@ function renderLogin() {
 
     try {
       if (mode === "login") {
-        await signIn(email, password);
+        await signIn(email, password, rememberMe);
       } else {
-        await signUp(email, password);
+        await signUp(email, password, rememberMe);
       }
       navigateTo("#/app/dashboard");
     } catch (error) {
@@ -371,15 +410,18 @@ function renderLogin() {
     }
   };
 
-  loginButton.addEventListener("click", () => runAuth("login"));
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    runAuth("login");
+  });
+  
   registerButton.addEventListener("click", () => runAuth("register"));
 
   actionRow.append(loginButton, registerButton);
-  form.append(emailField.wrapper, passwordField.wrapper, feedback, actionRow);
+  form.append(emailField.wrapper, passwordField.wrapper, rememberMeLabel, feedback, actionRow);
   card.append(form);
-  container.append(card);
 
-  appView.append(container);
+  appView.append(card);
   updateActiveTab();
 }
 
@@ -413,10 +455,12 @@ function createTransactionModal() {
     "categoryId",
     categories.map((item) => ({ value: item.id, label: item.label }))
   );
-  const cardField = createInput("Cartão (opcional)", "text", "cardId");
-  const invoiceField = createInput("Mês da fatura (opcional)", "month", "invoiceMonthKey");
-  cardField.input.required = false;
-  invoiceField.input.required = false;
+  
+  const cardField = createSelect("Cartão (opcional)", "cardId", []);
+  const invoiceField = createSelect("Mês da fatura (opcional)", "invoiceMonthKey", []);
+  
+  cardField.select.required = false;
+  invoiceField.select.required = false;
   categoryField.select.required = false;
 
   const feedback = document.createElement("p");
@@ -463,8 +507,8 @@ function createTransactionModal() {
       amount: amountField.input,
       kind: kindField.select,
       categoryId: categoryField.select,
-      cardId: cardField.input,
-      invoiceMonthKey: invoiceField.input,
+      cardId: cardField.select,
+      invoiceMonthKey: invoiceField.select,
     });
 
     if (!payload.date || !payload.description || Number.isNaN(payload.amount)) {
@@ -512,22 +556,74 @@ function createTransactionModal() {
       amount: amountField.input,
       kind: kindField.select,
       categoryId: categoryField.select,
-      cardId: cardField.input,
-      invoiceMonthKey: invoiceField.input,
+      cardId: cardField.select,
+      invoiceMonthKey: invoiceField.select,
     },
     feedback,
     txId: null,
   };
 }
 
-function openTransactionModal(tx = null) {
+async function openTransactionModal(tx = null) {
   if (!transactionModal) {
     transactionModal = createTransactionModal();
   }
   const modal = transactionModal;
   modal.txId = tx?.id || null;
   modal.title.textContent = tx ? "Editar transação" : "Nova transação";
-  modal.fields.date.value = tx?.date || "";
+  
+  // Popular select de cartões
+  const cards = await cardRepository.listCards();
+  modal.fields.cardId.innerHTML = '<option value="">Nenhum</option>';
+  cards.forEach(card => {
+    const option = document.createElement("option");
+    option.value = card.id;
+    option.textContent = card.name;
+    modal.fields.cardId.appendChild(option);
+  });
+  
+  // Popular select de meses de fatura (próximos 12 meses)
+  modal.fields.invoiceMonthKey.innerHTML = '<option value="">Nenhum</option>';
+  const today = new Date();
+  for (let i = 0; i < 12; i++) {
+    const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const monthLabel = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    const option = document.createElement("option");
+    option.value = monthKey;
+    option.textContent = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+    modal.fields.invoiceMonthKey.appendChild(option);
+  }
+  
+  // Função para calcular a fatura em aberto baseado no cartão e data
+  const calculateOpenInvoice = (cardId, transactionDate) => {
+    if (!cardId) return "";
+    const card = cards.find(c => c.id === cardId);
+    if (!card || !card.closingDay) return "";
+    
+    const txDate = new Date(transactionDate);
+    const txDay = txDate.getDate();
+    const closingDay = Number(card.closingDay);
+    
+    // Se a transação é antes do dia de fechamento, fatura do mês atual
+    // Se é depois, fatura do próximo mês
+    let invoiceMonth = txDate.getMonth();
+    let invoiceYear = txDate.getFullYear();
+    
+    if (txDay > closingDay) {
+      invoiceMonth += 1;
+      if (invoiceMonth > 11) {
+        invoiceMonth = 0;
+        invoiceYear += 1;
+      }
+    }
+    
+    return `${invoiceYear}-${String(invoiceMonth + 1).padStart(2, '0')}`;
+  };
+  
+  const todayStr = today.toISOString().split('T')[0];
+  
+  modal.fields.date.value = tx?.date || todayStr;
   modal.fields.description.value = tx?.description || "";
   modal.fields.amount.value = tx?.amount ?? "";
   modal.fields.kind.value = tx?.kind || "expense";
@@ -535,6 +631,35 @@ function openTransactionModal(tx = null) {
   modal.fields.cardId.value = tx?.cardId || "";
   modal.fields.invoiceMonthKey.value = tx?.invoiceMonthKey || "";
   modal.feedback.textContent = "";
+  
+  // Atualizar automaticamente o mês da fatura quando o cartão ou data mudar
+  const updateInvoiceMonth = () => {
+    const selectedCard = modal.fields.cardId.value;
+    const selectedDate = modal.fields.date.value;
+    if (selectedCard && selectedDate) {
+      const calculatedMonth = calculateOpenInvoice(selectedCard, selectedDate);
+      if (calculatedMonth) {
+        modal.fields.invoiceMonthKey.value = calculatedMonth;
+      }
+    } else {
+      modal.fields.invoiceMonthKey.value = "";
+    }
+  };
+  
+  // Listeners para atualização automática
+  modal.fields.cardId.addEventListener('change', updateInvoiceMonth);
+  modal.fields.date.addEventListener('change', updateInvoiceMonth);
+  
+  // Se for nova transação e tiver cartão selecionado, calcular fatura automaticamente
+  if (!tx && modal.fields.cardId.value) {
+    updateInvoiceMonth();
+  }
+
+  // Ocultar FAB temporariamente
+  const fab = document.querySelector(".fab");
+  if (fab) {
+    fab.style.display = "none";
+  }
 
   modal.overlay.classList.remove("hidden");
 }
@@ -542,6 +667,156 @@ function openTransactionModal(tx = null) {
 function closeTransactionModal() {
   if (transactionModal) {
     transactionModal.overlay.classList.add("hidden");
+  }
+  
+  // Mostrar FAB novamente
+  const fab = document.querySelector(".fab");
+  if (fab) {
+    fab.style.display = "";
+  }
+}
+
+function createCardModal() {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay hidden";
+
+  const modal = document.createElement("div");
+  modal.className = "modal";
+
+  const header = document.createElement("div");
+  header.className = "modal-header";
+
+  const title = document.createElement("h2");
+  title.className = "modal-title";
+  title.textContent = "Editar cartão";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "icon-button";
+  closeBtn.appendChild(createFluentIcon(FluentIcons.Dismiss));
+  closeBtn.setAttribute("aria-label", "Fechar");
+  closeBtn.addEventListener("click", closeCardModal);
+
+  header.append(title, closeBtn);
+
+  const form = document.createElement("form");
+  form.className = "form";
+
+  const nameField = createInput("Nome do cartão", "text", "name");
+  nameField.input.placeholder = "Ex: Visa Gold";
+
+  const fieldsRow = document.createElement("div");
+  fieldsRow.style.display = "grid";
+  fieldsRow.style.gridTemplateColumns = "1fr 1fr";
+  fieldsRow.style.gap = "1rem";
+
+  const closingField = createInput("Dia fechamento", "number", "closingDay");
+  closingField.input.min = "1";
+  closingField.input.max = "31";
+  closingField.input.placeholder = "Ex: 10";
+
+  const dueField = createInput("Dia vencimento", "number", "dueDay");
+  dueField.input.min = "1";
+  dueField.input.max = "31";
+  dueField.input.placeholder = "Ex: 15";
+
+  fieldsRow.append(closingField.wrapper, dueField.wrapper);
+
+  const limitField = createInput("Limite (R$)", "number", "limitCents");
+  limitField.input.step = "0.01";
+  limitField.input.placeholder = "Ex: 5000.00";
+
+  const feedback = document.createElement("p");
+  feedback.className = "form-feedback";
+  feedback.textContent = "";
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+
+  const cancelBtn = createButton("Cancelar", { type: "button" });
+  cancelBtn.classList.add("secondary");
+  cancelBtn.addEventListener("click", closeCardModal);
+
+  const saveBtn = createButton("Salvar", { type: "submit" });
+
+  actions.append(cancelBtn, saveBtn);
+  form.append(nameField.wrapper, fieldsRow, limitField.wrapper, feedback, actions);
+
+  modal.append(header, form);
+  overlay.append(modal);
+  document.body.append(overlay);
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    feedback.textContent = "";
+
+    const cardId = overlay.cardId;
+    if (!cardId) return;
+
+    const limitInReais = Number(limitField.input.value);
+    const payload = {
+      name: nameField.input.value.trim(),
+      closingDay: Number(closingField.input.value),
+      dueDay: Number(dueField.input.value),
+      limitCents: Math.round(limitInReais * 100),
+    };
+
+    if (
+      !payload.name ||
+      Number.isNaN(payload.closingDay) ||
+      Number.isNaN(payload.dueDay) ||
+      Number.isNaN(payload.limitCents)
+    ) {
+      feedback.textContent = "Preencha todos os campos corretamente.";
+      return;
+    }
+
+    try {
+      await cardRepository.updateCard(cardId, payload);
+      closeCardModal();
+      await renderRoute();
+    } catch (error) {
+      feedback.textContent = "Não foi possível atualizar o cartão.";
+    }
+  });
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeCardModal();
+  });
+
+  return {
+    overlay,
+    title,
+    form,
+    fields: {
+      name: nameField.input,
+      closingDay: closingField.input,
+      dueDay: dueField.input,
+      limitCents: limitField.input,
+    },
+    feedback,
+  };
+}
+
+function openCardModal(card) {
+  if (!cardModal) {
+    cardModal = createCardModal();
+  }
+  const modal = cardModal;
+  modal.overlay.cardId = card.id;
+  modal.title.textContent = "Editar cartão";
+
+  modal.fields.name.value = card.name || "";
+  modal.fields.closingDay.value = card.closingDay || "";
+  modal.fields.dueDay.value = card.dueDay || "";
+  modal.fields.limitCents.value = card.limitCents ? (card.limitCents / 100).toFixed(2) : "";
+  modal.feedback.textContent = "";
+
+  modal.overlay.classList.remove("hidden");
+}
+
+function closeCardModal() {
+  if (cardModal) {
+    cardModal.overlay.classList.add("hidden");
   }
 }
 
@@ -941,6 +1216,9 @@ function renderTransactionList(title, items, options = {}) {
     const row = document.createElement("div");
     row.className = "transaction-row";
 
+    const content = document.createElement("div");
+    content.className = "transaction-content";
+
     const main = document.createElement("div");
     const titleLine = document.createElement("strong");
     titleLine.textContent = tx.description || "Sem descrição";
@@ -951,70 +1229,91 @@ function renderTransactionList(title, items, options = {}) {
 
     const amount = document.createElement("div");
     amount.className = "transaction-amount";
+    if (tx.kind === "income") {
+      amount.classList.add("income");
+    } else if (tx.kind === "expense") {
+      amount.classList.add("expense");
+    }
     amount.textContent = formatCurrency(tx.amount);
 
-    row.append(main, amount);
+    content.append(main, amount);
 
-    if (options.showActions) {
-      const actions = document.createElement("div");
-      actions.className = "transaction-actions";
-      const editButton = createButton("Editar", {
-        variant: "secondary",
-        onClick: () => openTransactionModal(tx),
-      });
-      const deleteButton = createButton("Excluir", {
-        variant: "secondary",
-        onClick: async () => {
-          if (window.confirm("Deseja excluir esta transação?")) {
-            await transactionRepository.deleteTransaction(tx.id);
-            await renderRoute();
-          }
-        },
-      });
-      const categoryEditor = document.createElement("div");
-      categoryEditor.className = "category-editor";
-      const categorySelect = document.createElement("select");
-      categorySelect.className = "category-select";
-      const emptyOption = document.createElement("option");
-      emptyOption.value = "";
-      emptyOption.textContent = "Categoria";
-      categorySelect.append(emptyOption);
-      categories.forEach((category) => {
-        const option = document.createElement("option");
-        option.value = category.id;
-        option.textContent = category.label;
-        categorySelect.append(option);
-      });
-      categorySelect.value = tx.categoryId || "";
+    const actions = document.createElement("div");
+    actions.className = "transaction-actions-hidden";
 
-      const ruleLabel = document.createElement("label");
-      ruleLabel.className = "checkbox";
-      const ruleCheckbox = document.createElement("input");
-      ruleCheckbox.type = "checkbox";
-      const ruleText = document.createElement("span");
-      ruleText.textContent = "Sempre assim";
-      ruleLabel.append(ruleCheckbox, ruleText);
+    const editBtn = document.createElement("button");
+    editBtn.className = "icon-button";
+    editBtn.appendChild(createFluentIcon(FluentIcons.Edit));
+    editBtn.setAttribute("aria-label", "Editar");
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openTransactionModal(tx);
+    });
 
-      const saveCategoryButton = createButton("Salvar categoria", {
-        variant: "secondary",
-        onClick: async () => {
-          const newCategoryId = categorySelect.value || undefined;
-          await transactionRepository.updateTransaction(tx.id, {
-            categoryId: newCategoryId,
-          });
-          if (ruleCheckbox.checked && newCategoryId) {
-            await saveMerchantRule(tx.description || "", newCategoryId);
-          }
-          await renderRoute();
-        },
-      });
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "icon-button danger";
+    deleteBtn.appendChild(createFluentIcon(FluentIcons.Delete));
+    deleteBtn.setAttribute("aria-label", "Excluir");
+    deleteBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (confirm(`Excluir "${tx.description}"?`)) {
+        await transactionRepository.deleteTransaction(tx.id);
+        await renderRoute();
+      }
+    });
 
-      categoryEditor.append(categorySelect, ruleLabel, saveCategoryButton);
+    actions.append(editBtn, deleteBtn);
+    row.append(content, actions);
 
-      actions.append(editButton, deleteButton);
-      row.append(actions);
-      row.append(categoryEditor);
-    }
+    // Swipe gesture
+    let startX = 0;
+    let currentX = 0;
+    let isDragging = false;
+
+    const handleStart = (e) => {
+      startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+      isDragging = true;
+      content.style.transition = 'none';
+    };
+
+    const handleMove = (e) => {
+      if (!isDragging) return;
+      currentX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+      const diff = currentX - startX;
+      if (diff < 0) {
+        content.style.transform = `translateX(${Math.max(diff, -120)}px)`;
+      }
+    };
+
+    const handleEnd = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      content.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+      const diff = currentX - startX;
+      
+      if (diff < -60) {
+        content.style.transform = 'translateX(-120px)';
+        row.classList.add('swiped');
+      } else {
+        content.style.transform = 'translateX(0)';
+        row.classList.remove('swiped');
+      }
+    };
+
+    content.addEventListener('mousedown', handleStart);
+    content.addEventListener('touchstart', handleStart, { passive: true });
+    content.addEventListener('mousemove', handleMove);
+    content.addEventListener('touchmove', handleMove, { passive: true });
+    content.addEventListener('mouseup', handleEnd);
+    content.addEventListener('touchend', handleEnd);
+    content.addEventListener('mouseleave', handleEnd);
+
+    content.addEventListener("click", (e) => {
+      if (Math.abs(currentX - startX) < 5) {
+        openTransactionModal(tx);
+      }
+    });
+    content.style.cursor = "pointer";
 
     list.append(row);
   });
@@ -1059,9 +1358,18 @@ async function renderDashboard() {
   const summaryGrid = document.createElement("div");
   summaryGrid.className = "summary-grid";
   
-  const createStatCard = (label, value, isPositive) => {
+  // Ícones SVG para os cards
+  const incomeIcon = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4L12 20M12 4L6 10M12 4L18 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const expenseIcon = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 20L12 4M12 20L18 14M12 20L6 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const balanceIcon = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM13 17H11V15H13V17ZM13 13H11V7H13V13Z" fill="currentColor"/></svg>`;
+  
+  const createStatCard = (label, value, type, icon) => {
     const card = document.createElement("div");
-    card.className = "card stat-card";
+    card.className = `card stat-card ${type}`;
+    
+    const iconEl = document.createElement("div");
+    iconEl.className = "stat-icon";
+    iconEl.innerHTML = icon;
     
     const labelEl = document.createElement("div");
     labelEl.className = "stat-label";
@@ -1069,36 +1377,34 @@ async function renderDashboard() {
     
     const valueEl = document.createElement("div");
     valueEl.className = "stat-value";
-    if (isPositive !== undefined) {
-      valueEl.classList.add(isPositive ? "positive" : "negative");
+    if (type === "income") {
+      valueEl.classList.add("positive");
+    } else if (type === "expense") {
+      valueEl.classList.add("negative");
+    } else if (type === "balance") {
+      valueEl.classList.add(value >= 0 ? "positive" : "negative");
     }
     valueEl.textContent = formatCurrency(value);
     
-    card.append(labelEl, valueEl);
+    card.append(iconEl, labelEl, valueEl);
     return card;
   };
   
   summaryGrid.append(
-    createStatCard("Receitas", totalIncome, true),
-    createStatCard("Despesas", totalExpense, false),
-    createStatCard("Saldo", balance, balance >= 0)
+    createStatCard("Receitas", totalIncome, "income", incomeIcon),
+    createStatCard("Despesas", totalExpense, "expense", expenseIcon),
+    createStatCard("Saldo", balance, "balance", balanceIcon)
   );
 
-  const incomeList = renderTransactionList(
-    "Receitas",
-    sortByDateDesc(income)
-  );
-  const expenseList = renderTransactionList(
-    "Despesas",
-    sortByDateDesc(expenses)
+  // Resumo de transações recentes
+  const recentTransactions = sortByDateDesc(transactions).slice(0, 5);
+  const recentSection = renderTransactionList(
+    "Últimas transações",
+    recentTransactions,
+    { showActions: true }
   );
 
-  const transferBlock = renderTransferSection(sortByDateDesc(transfers));
-
-  appView.append(summaryGrid, incomeList, expenseList);
-  if (transferBlock) {
-    appView.append(transferBlock);
-  }
+  appView.append(summaryGrid, recentSection);
 }
 
 async function renderTransactions() {
@@ -1107,13 +1413,8 @@ async function renderTransactions() {
   );
 
   const all = sortByDateDesc(transactions);
-  
-  const addButton = createButton("+ Nova", {
-    onClick: () => openTransactionModal(),
-  });
 
   const list = renderTransactionList("Transações", all, {
-    action: addButton,
     showActions: false,
   });
 
@@ -1123,14 +1424,37 @@ async function renderTransactions() {
 async function renderCards() {
   const cardForm = document.createElement("form");
   cardForm.className = "card form";
-  const formTitle = document.createElement("h2");
+  
+  const header = document.createElement("div");
+  header.className = "section-header";
+  const formTitle = document.createElement("h3");
+  formTitle.className = "section-title";
   formTitle.textContent = "Novo cartão";
+  header.append(formTitle);
 
-  const nameField = createInput("Nome", "text", "name");
-  const closingField = createInput("Dia de fechamento", "number", "closingDay");
-  const dueField = createInput("Dia de vencimento", "number", "dueDay");
-  const limitField = createInput("Limite (centavos)", "number", "limitCents");
-  limitField.input.step = "1";
+  const nameField = createInput("Nome do cartão", "text", "name");
+  nameField.input.placeholder = "Ex: Visa Gold";
+  
+  const fieldsRow = document.createElement("div");
+  fieldsRow.style.display = "grid";
+  fieldsRow.style.gridTemplateColumns = "1fr 1fr";
+  fieldsRow.style.gap = "1rem";
+  
+  const closingField = createInput("Dia fechamento", "number", "closingDay");
+  closingField.input.min = "1";
+  closingField.input.max = "31";
+  closingField.input.placeholder = "Ex: 10";
+  
+  const dueField = createInput("Dia vencimento", "number", "dueDay");
+  dueField.input.min = "1";
+  dueField.input.max = "31";
+  dueField.input.placeholder = "Ex: 15";
+  
+  fieldsRow.append(closingField.wrapper, dueField.wrapper);
+  
+  const limitField = createInput("Limite (R$)", "number", "limitCents");
+  limitField.input.step = "0.01";
+  limitField.input.placeholder = "Ex: 5000.00";
 
   const cardFeedback = document.createElement("p");
   cardFeedback.className = "form-feedback";
@@ -1138,14 +1462,14 @@ async function renderCards() {
 
   const actions = document.createElement("div");
   actions.className = "actions";
-  const saveButton = createButton("Salvar cartão", { type: "submit" });
+  const saveButton = createButton("Adicionar cartão", { type: "submit" });
+  saveButton.style.width = "100%";
   actions.append(saveButton);
 
   cardForm.append(
-    formTitle,
+    header,
     nameField.wrapper,
-    closingField.wrapper,
-    dueField.wrapper,
+    fieldsRow,
     limitField.wrapper,
     cardFeedback,
     actions
@@ -1154,12 +1478,14 @@ async function renderCards() {
   cardForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     cardFeedback.textContent = "";
-    const payload = buildCardPayload({
-      name: nameField.input,
-      closingDay: closingField.input,
-      dueDay: dueField.input,
-      limitCents: limitField.input,
-    });
+    
+    const limitInReais = Number(limitField.input.value);
+    const payload = {
+      name: nameField.input.value.trim(),
+      closingDay: Number(closingField.input.value),
+      dueDay: Number(dueField.input.value),
+      limitCents: Math.round(limitInReais * 100),
+    };
 
     if (
       !payload.name ||
@@ -1167,7 +1493,7 @@ async function renderCards() {
       Number.isNaN(payload.dueDay) ||
       Number.isNaN(payload.limitCents)
     ) {
-      cardFeedback.textContent = "Preencha todos os campos do cartão.";
+      cardFeedback.textContent = "Preencha todos os campos corretamente.";
       return;
     }
 
@@ -1187,17 +1513,25 @@ async function renderCards() {
 
   const cardsSection = document.createElement("section");
   cardsSection.className = "card";
-  const cardsTitle = document.createElement("h2");
-  cardsTitle.textContent = "Cartões ativos";
+  
+  const cardsHeader = document.createElement("div");
+  cardsHeader.className = "section-header";
+  const cardsTitle = document.createElement("h3");
+  cardsTitle.className = "section-title";
+  cardsTitle.textContent = "Meus cartões";
+  cardsHeader.append(cardsTitle);
 
   const cardsGrid = document.createElement("div");
   cardsGrid.className = "cards-grid";
 
   if (!cards.length) {
-    const empty = document.createElement("p");
-    empty.className = "muted";
-    empty.textContent = "Nenhum cartão cadastrado.";
-    cardsSection.append(cardsTitle, empty);
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    const emptyText = document.createElement("p");
+    emptyText.className = "text-secondary";
+    emptyText.textContent = "Nenhum cartão cadastrado";
+    empty.append(emptyText);
+    cardsSection.append(cardsHeader, empty);
   } else {
     await Promise.all(
       cards.map(async (card) => {
@@ -1206,36 +1540,135 @@ async function renderCards() {
         );
         const availableCents = (Number(card.limitCents) || 0) - unpaidTotalCents;
 
+        const cardWrapper = document.createElement("div");
+        cardWrapper.style.position = "relative";
+        cardWrapper.style.overflow = "hidden";
+
         const cardItem = document.createElement("div");
         cardItem.className = "card-item";
+        cardItem.style.position = "relative";
+        cardItem.style.zIndex = "2";
+        cardItem.style.background = "var(--surface)";
 
         const title = document.createElement("h3");
         title.textContent = card.name || "Cartão";
-        title.title = card.name || "Cartão";
 
-        const limit = document.createElement("p");
-        limit.textContent = `Limite: ${formatCurrencyFromCents(card.limitCents)}`;
+        const limit = document.createElement("div");
+        limit.className = "card-item-label";
+        limit.textContent = "Limite";
+        
+        const limitValue = document.createElement("div");
+        limitValue.className = "card-item-value";
+        limitValue.textContent = formatCurrencyFromCents(card.limitCents);
 
-        const unpaid = document.createElement("p");
-        unpaid.textContent = `Em aberto (não pago): ${formatCurrencyFromCents(
-          unpaidTotalCents
-        )}`;
+        const unpaid = document.createElement("div");
+        unpaid.className = "card-item-label";
+        unpaid.textContent = "Em aberto";
+        unpaid.style.marginTop = "0.5rem";
+        
+        const unpaidValue = document.createElement("div");
+        unpaidValue.className = "card-item-value";
+        unpaidValue.textContent = formatCurrencyFromCents(unpaidTotalCents);
 
-        const available = document.createElement("p");
-        available.textContent = `Disponível: ${formatCurrencyFromCents(
-          availableCents
-        )}`;
+        const available = document.createElement("div");
+        available.className = "card-item-label";
+        available.textContent = "Disponível";
+        available.style.marginTop = "0.5rem";
+        
+        const availableValue = document.createElement("div");
+        availableValue.className = "card-item-value";
+        availableValue.style.color = availableCents > 0 ? "var(--success)" : "var(--danger)";
+        availableValue.textContent = formatCurrencyFromCents(availableCents);
 
-        const link = document.createElement("a");
-        link.className = "button secondary";
-        link.href = `#/app/invoices?cardId=${card.id}&m=${monthState.current}`;
+        const link = document.createElement("button");
+        link.className = "button";
+        link.style.width = "100%";
+        link.style.marginTop = "1rem";
         link.textContent = "Ver faturas";
+        link.addEventListener("click", () => {
+          navigateTo(`#/app/invoices?cardId=${card.id}&m=${monthState.current}`);
+        });
 
-        cardItem.append(title, limit, unpaid, available, link);
-        cardsGrid.append(cardItem);
+        cardItem.append(title, limit, limitValue, unpaid, unpaidValue, available, availableValue, link);
+
+        const actions = document.createElement("div");
+        actions.className = "card-actions-hidden";
+
+        const editBtn = document.createElement("button");
+        editBtn.className = "icon-button";
+        editBtn.appendChild(createFluentIcon(FluentIcons.Edit));
+        editBtn.setAttribute("aria-label", "Editar cartão");
+        editBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          openCardModal(card);
+        });
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "icon-button danger";
+        deleteBtn.appendChild(createFluentIcon(FluentIcons.Delete));
+        deleteBtn.setAttribute("aria-label", "Excluir cartão");
+        deleteBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (confirm(`Excluir cartão "${card.name}"? Isso não excluirá as transações associadas.`)) {
+            try {
+              await cardRepository.deleteCard(card.id);
+              await renderRoute();
+            } catch (error) {
+              alert("Não foi possível excluir o cartão.");
+            }
+          }
+        });
+
+        actions.append(editBtn, deleteBtn);
+        cardWrapper.append(cardItem, actions);
+
+        // Swipe gesture
+        let startX = 0;
+        let currentX = 0;
+        let isDragging = false;
+
+        const handleStart = (e) => {
+          startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+          isDragging = true;
+          cardItem.style.transition = 'none';
+        };
+
+        const handleMove = (e) => {
+          if (!isDragging) return;
+          currentX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+          const diff = currentX - startX;
+          if (diff < 0) {
+            cardItem.style.transform = `translateX(${Math.max(diff, -140)}px)`;
+          }
+        };
+
+        const handleEnd = () => {
+          if (!isDragging) return;
+          isDragging = false;
+          cardItem.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+          const diff = currentX - startX;
+          
+          if (diff < -60) {
+            cardItem.style.transform = 'translateX(-140px)';
+            cardWrapper.classList.add('swiped');
+          } else {
+            cardItem.style.transform = 'translateX(0)';
+            cardWrapper.classList.remove('swiped');
+          }
+        };
+
+        cardItem.addEventListener('mousedown', handleStart);
+        cardItem.addEventListener('touchstart', handleStart, { passive: true });
+        cardItem.addEventListener('mousemove', handleMove);
+        cardItem.addEventListener('touchmove', handleMove, { passive: true });
+        cardItem.addEventListener('mouseup', handleEnd);
+        cardItem.addEventListener('touchend', handleEnd);
+        cardItem.addEventListener('mouseleave', handleEnd);
+
+        cardsGrid.append(cardWrapper);
       })
     );
-    cardsSection.append(cardsTitle, cardsGrid);
+    cardsSection.append(cardsHeader, cardsGrid);
   }
 
   appView.append(cardForm, cardsSection);
@@ -1243,19 +1676,69 @@ async function renderCards() {
 
 async function renderInvoices() {
   const cardId = getQueryParam("cardId");
+  
+  // Seletor de cartões
+  const cards = await cardRepository.listCards();
+  const cardSelectorWrapper = document.createElement("div");
+  cardSelectorWrapper.className = "form-group";
+  
+  const cardSelectorLabel = document.createElement("label");
+  cardSelectorLabel.textContent = "Filtrar por cartão";
+  cardSelectorLabel.style.fontWeight = "600";
+  cardSelectorLabel.style.marginBottom = "0.5rem";
+  cardSelectorLabel.style.display = "block";
+  
+  const cardSelector = document.createElement("select");
+  cardSelector.className = "card-filter-select";
+  
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = "Selecione um cartão";
+  cardSelector.appendChild(defaultOption);
+  
+  cards.forEach(card => {
+    const option = document.createElement("option");
+    option.value = card.id;
+    option.textContent = card.name;
+    if (card.id === cardId) {
+      option.selected = true;
+    }
+    cardSelector.appendChild(option);
+  });
+  
+  cardSelector.addEventListener("change", async (e) => {
+    const selectedCardId = e.target.value;
+    if (selectedCardId) {
+      navigateTo(`#/app/invoices?cardId=${selectedCardId}`);
+    } else {
+      navigateTo(`#/app/invoices`);
+    }
+  });
+  
+  cardSelectorWrapper.append(cardSelectorLabel, cardSelector);
+  appView.append(cardSelectorWrapper);
 
   if (!cardId) {
     const empty = createCard(
-      "Selecione um cartão",
-      "Use a tela de cartões para escolher uma fatura."
+      "Resumo das faturas abertas e pagas.",
+      "Use o seletor acima para escolher um cartão e visualizar suas faturas."
     );
     appView.append(empty);
     return;
   }
 
   const card = await cardRepository.getCard(cardId);
+  if (!card) {
+    const empty = createCard(
+      "Cartão não encontrado",
+      "O cartão selecionado não existe ou foi removido."
+    );
+    appView.append(empty);
+    return;
+  }
+  
   const cardTitle = createCard(
-    card?.name || "Faturas",
+    card.name || "Faturas",
     "Acompanhe o status das faturas e transações."
   );
 
@@ -1677,6 +2160,12 @@ async function renderRoute() {
   appView.innerHTML = "";
   appView.append(headline);
 
+  // Remover FAB anterior se existir
+  const existingFab = document.querySelector(".fab");
+  if (existingFab) {
+    existingFab.remove();
+  }
+
   if (routeKey === "#/app/dashboard") {
     await renderDashboard();
   } else if (routeKey === "#/app/transactions") {
@@ -1696,29 +2185,42 @@ async function renderRoute() {
     appView.append(info);
   }
 
+  // Adicionar FAB para transações em rotas relevantes
+  if (["#/app/dashboard", "#/app/transactions"].includes(routeKey)) {
+    const fab = document.createElement("button");
+    fab.className = "fab";
+    fab.appendChild(createFluentIcon(FluentIcons.Add, 24));
+    fab.setAttribute("aria-label", "Adicionar transação");
+    fab.addEventListener("click", () => openTransactionModal());
+    document.body.append(fab);
+  }
+
   updateActiveTab();
 }
 
 function normalizeRoute(hash) {
-  if (hash === "#" || hash === "") {
+  // Remover query params para normalização
+  const baseHash = hash.split('?')[0];
+  
+  if (baseHash === "#" || baseHash === "") {
     return "#/app/dashboard";
   }
-  if (hash === "#/dashboard") {
+  if (baseHash === "#/dashboard") {
     return "#/app/dashboard";
   }
-  if (hash === "#/transactions") {
+  if (baseHash === "#/transactions") {
     return "#/app/transactions";
   }
-  if (hash === "#/cards") {
+  if (baseHash === "#/cards") {
     return "#/app/cards";
   }
-  if (hash === "#/invoices") {
+  if (baseHash === "#/invoices" || baseHash === "#/app/invoices") {
     return "#/app/invoices";
   }
-  if (hash === "#/import") {
+  if (baseHash === "#/import") {
     return "#/app/import";
   }
-  return hash;
+  return baseHash;
 }
 
 function redirectToLogin() {
@@ -1892,10 +2394,27 @@ function createCardRepository() {
     return snapshot.exists() ? Number(snapshot.val()) || 0 : 0;
   }
 
+  async function updateCard(cardId, updates) {
+    const uid = getUserId();
+    const cardPath = `/users/${uid}/cards/${cardId}`;
+    await update(ref(db), {
+      [cardPath]: stripUndefined({ ...updates, id: cardId })
+    });
+  }
+
+  async function deleteCard(cardId) {
+    const uid = getUserId();
+    await update(ref(db), {
+      [`/users/${uid}/cards/${cardId}`]: null
+    });
+  }
+
   return {
     createCard,
     listCards,
     getCard,
+    updateCard,
+    deleteCard,
     getInvoiceMeta,
     setInvoicePaid,
     recomputeInvoiceMeta,
