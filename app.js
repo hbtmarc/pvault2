@@ -402,6 +402,12 @@ function renderLogin() {
   const monthToolbar = document.getElementById('month-toolbar');
   const appView = document.getElementById('app-view');
   
+  // Esconder FAB na tela de login
+  const fabButton = document.getElementById("fab-new-transaction");
+  if (fabButton) {
+    fabButton.classList.remove("visible");
+  }
+  
   if (topBar) topBar.style.display = 'none';
   if (monthToolbar) monthToolbar.style.display = 'none';
   if (appView) {
@@ -1799,7 +1805,14 @@ async function renderDashboard() {
     { showActions: true }
   );
 
-  appView.append(summaryGrid, incomeList, expenseList);
+  // Adicionar botão de nova transação (desktop)
+  const addButton = createButton("Nova transação", {
+    onClick: () => openTransactionModal(),
+  });
+  addButton.style.marginTop = "1rem";
+  addButton.classList.add("desktop-button");
+
+  appView.append(summaryGrid, incomeList, expenseList, addButton);
 }
 
 async function renderTransactions() {
@@ -1813,7 +1826,14 @@ async function renderTransactions() {
     showActions: false,
   });
 
-  appView.append(list);
+  // Adicionar botão de nova transação (desktop)
+  const addButton = createButton("Nova transação", {
+    onClick: () => openTransactionModal(),
+  });
+  addButton.style.marginTop = "1rem";
+  addButton.classList.add("desktop-button");
+
+  appView.append(list, addButton);
 }
 
 async function renderCards() {
@@ -2826,14 +2846,14 @@ async function renderRoute() {
     appView.append(info);
   }
 
-  // Adicionar FAB para transações em rotas relevantes
-  if (["#/app/dashboard", "#/app/transactions"].includes(routeKey)) {
-    const fab = document.createElement("button");
-    fab.className = "fab";
-    fab.appendChild(createFluentIcon(FluentIcons.Add, 24));
-    fab.setAttribute("aria-label", "Adicionar transação");
-    fab.addEventListener("click", () => openTransactionModal());
-    document.body.append(fab);
+  // Controlar FAB (mobile) para transações em rotas relevantes
+  const fabButton = document.getElementById("fab-new-transaction");
+  if (fabButton) {
+    if (["#/app/dashboard", "#/app/transactions"].includes(routeKey)) {
+      fabButton.classList.add("visible");
+    } else {
+      fabButton.classList.remove("visible");
+    }
   }
 
   updateActiveTab();
@@ -3449,6 +3469,13 @@ function init() {
   syncMonthFromStorage();
   renderMonthToolbar();
   initAuth();
+  
+  // Configurar FAB de nova transação
+  const fabButton = document.getElementById("fab-new-transaction");
+  if (fabButton) {
+    fabButton.addEventListener("click", () => openTransactionModal());
+  }
+  
   window.addEventListener("hashchange", handleHashChange);
   renderRoute();
 }
