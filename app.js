@@ -566,6 +566,47 @@ function createTransactionModal() {
   installmentInputWrapper.append(installmentInput.wrapper, installmentPreview);
   installmentWrapper.append(installmentLabel, installmentInputWrapper);
   
+  // Campo de financiamento (apenas para despesas)
+  const financingWrapper = document.createElement("div");
+  financingWrapper.className = "financing-section hidden";
+  
+  const financingLabel = document.createElement("label");
+  financingLabel.className = "checkbox";
+  const financingCheckbox = document.createElement("input");
+  financingCheckbox.type = "checkbox";
+  financingCheckbox.id = "financing-checkbox";
+  const financingText = document.createElement("span");
+  financingText.textContent = "Financiamento (parcelas de mesmo valor)";
+  financingLabel.append(financingCheckbox, financingText);
+  
+  const financingInputWrapper = document.createElement("div");
+  financingInputWrapper.className = "financing-input-wrapper hidden";
+  financingInputWrapper.style.display = "grid";
+  financingInputWrapper.style.gridTemplateColumns = "1fr 1fr";
+  financingInputWrapper.style.gap = "1rem";
+  
+  const financingTotalInput = createInput("Total de parcelas", "number", "financingTotal");
+  financingTotalInput.input.min = "2";
+  financingTotalInput.input.max = "360";
+  financingTotalInput.input.placeholder = "Ex: 24";
+  financingTotalInput.input.required = false;
+  
+  const financingCurrentInput = createInput("Parcela inicial", "number", "financingCurrent");
+  financingCurrentInput.input.min = "1";
+  financingCurrentInput.input.value = "1";
+  financingCurrentInput.input.placeholder = "Ex: 1";
+  financingCurrentInput.input.required = false;
+  
+  const financingPreview = document.createElement("div");
+  financingPreview.className = "financing-preview";
+  financingPreview.style.fontSize = "0.875rem";
+  financingPreview.style.color = "var(--text-secondary)";
+  financingPreview.style.marginTop = "0.5rem";
+  financingPreview.style.gridColumn = "1 / -1";
+  
+  financingInputWrapper.append(financingTotalInput.wrapper, financingCurrentInput.wrapper, financingPreview);
+  financingWrapper.append(financingLabel, financingInputWrapper);
+  
   // Campo de recorrência (receitas)
   const recurrenceWrapper = document.createElement("div");
   recurrenceWrapper.className = "recurrence-section";
@@ -576,7 +617,7 @@ function createTransactionModal() {
   recurrenceCheckbox.type = "checkbox";
   recurrenceCheckbox.id = "recurrence-checkbox";
   const recurrenceText = document.createElement("span");
-  recurrenceText.textContent = "Transação recorrente (criar 12 meses)";
+  recurrenceText.textContent = "Transação recorrente";
   recurrenceLabel.append(recurrenceCheckbox, recurrenceText);
   
   recurrenceWrapper.append(recurrenceLabel);
@@ -585,9 +626,14 @@ function createTransactionModal() {
   recurrenceCheckbox.addEventListener("change", () => {
     if (recurrenceCheckbox.checked) {
       installmentCheckbox.checked = false;
+      financingCheckbox.checked = false;
       installmentInputWrapper.classList.add("hidden");
+      financingInputWrapper.classList.add("hidden");
       installmentInput.input.value = "";
       installmentPreview.textContent = "";
+      financingTotalInput.input.value = "";
+      financingCurrentInput.input.value = "1";
+      financingPreview.textContent = "";
     }
   });
   
@@ -598,10 +644,48 @@ function createTransactionModal() {
       installmentInput.input.value = "";
       installmentPreview.textContent = "";
     } else {
-      // Se parcelamento for marcado, desmarcar recorrência
+      // Se parcelamento for marcado, desmarcar recorrência e financiamento
       recurrenceCheckbox.checked = false;
+      financingCheckbox.checked = false;
+      financingInputWrapper.classList.add("hidden");
+      financingTotalInput.input.value = "";
+      financingCurrentInput.input.value = "1";
+      financingPreview.textContent = "";
     }
   });
+  
+  // Lógica de financiamento
+  financingCheckbox.addEventListener("change", () => {
+    financingInputWrapper.classList.toggle("hidden", !financingCheckbox.checked);
+    if (!financingCheckbox.checked) {
+      financingTotalInput.input.value = "";
+      financingCurrentInput.input.value = "1";
+      financingPreview.textContent = "";
+    } else {
+      // Se financiamento for marcado, desmarcar parcelamento e recorrência
+      installmentCheckbox.checked = false;
+      recurrenceCheckbox.checked = false;
+      installmentInputWrapper.classList.add("hidden");
+      installmentInput.input.value = "";
+      installmentPreview.textContent = "";
+    }
+  });
+  
+  // Mostrar/ocultar opção de financiamento apenas para despesas
+  const toggleFinancingOption = () => {
+    const isExpense = kindField.select.value === "expense";
+    financingWrapper.classList.toggle("hidden", !isExpense);
+    
+    if (!isExpense) {
+      financingCheckbox.checked = false;
+      financingInputWrapper.classList.add("hidden");
+      financingTotalInput.input.value = "";
+      financingCurrentInput.input.value = "1";
+      financingPreview.textContent = "";
+    }
+  };
+  
+  kindField.select.addEventListener("change", toggleFinancingOption);
   
   const updateInstallmentPreview = () => {
     const amount = parseFloat(amountField.input.value) || 0;
@@ -621,8 +705,29 @@ function createTransactionModal() {
     }
   };
   
-  amountField.input.addEventListener("input", updateInstallmentPreview);
+  const updateFinancingPreview = () => {
+    const amount = parseFloat(amountField.input.value) || 0;
+    const total = parseInt(financingTotalInput.input.value) || 0;
+    const current = parseInt(financingCurrentInput.input.value) || 1;
+    
+    if (amount > 0 && total >= 2 && current >= 1 && current <= total) {
+      const remaining = total - current + 1;
+      financingPreview.innerHTML = `
+        <strong>Parcela ${current}/${total}</strong> • Valor: <strong>${formatCurrency(amount)}</strong><br>
+        <small>Serão criadas ${remaining} parcela(s) de ${formatCurrency(amount)} cada</small>
+      `;
+    } else {
+      financingPreview.textContent = "";
+    }
+  };
+  
+  amountField.input.addEventListener("input", () => {
+    updateInstallmentPreview();
+    updateFinancingPreview();
+  });
   installmentInput.input.addEventListener("input", updateInstallmentPreview);
+  financingTotalInput.input.addEventListener("input", updateFinancingPreview);
+  financingCurrentInput.input.addEventListener("input", updateFinancingPreview);
   
   // Mostrar/ocultar opção de parcelamento baseado em cartão + tipo despesa
   const toggleInstallmentOption = () => {
@@ -672,6 +777,7 @@ function createTransactionModal() {
     cardField.wrapper,
     invoiceField.wrapper,
     installmentWrapper,
+    financingWrapper,
     recurrenceWrapper,
     ruleLabel,
     feedback,
@@ -684,10 +790,23 @@ function createTransactionModal() {
     
     const installments = installmentCheckbox.checked ? parseInt(installmentInput.input.value) || 0 : 0;
     const isRecurrent = recurrenceCheckbox.checked;
+    const isFinancing = financingCheckbox.checked;
+    const financingTotal = isFinancing ? parseInt(financingTotalInput.input.value) || 0 : 0;
+    const financingCurrent = isFinancing ? parseInt(financingCurrentInput.input.value) || 1 : 1;
     
     // Validações
     if (installments > 0 && (installments < 2 || installments > 36)) {
       feedback.textContent = "Número de parcelas deve ser entre 2 e 36.";
+      return;
+    }
+    
+    if (isFinancing && (financingTotal < 2 || financingTotal > 360)) {
+      feedback.textContent = "Total de parcelas do financiamento deve ser entre 2 e 360.";
+      return;
+    }
+    
+    if (isFinancing && (financingCurrent < 1 || financingCurrent > financingTotal)) {
+      feedback.textContent = "Parcela inicial inválida.";
       return;
     }
     
@@ -719,6 +838,11 @@ function createTransactionModal() {
       if (installments > 1 && payload.cardId && payload.kind === "expense") {
         // O sistema detecta automaticamente a notação "1/12" na descrição
         payload.description = `${payload.description} 1/${installments}`;
+      }
+      
+      // Se for financiamento, adicionar notação
+      if (isFinancing && payload.kind === "expense") {
+        payload.description = `${payload.description} [FIN:${financingCurrent}/${financingTotal}]`;
       }
       
       // Se for recorrente, marcar na descrição para criar 12 meses
@@ -952,6 +1076,42 @@ async function openTransactionModal(tx = null) {
   modal.fields.cardId.value = tx?.cardId || "";
   modal.fields.invoiceMonthKey.value = tx?.invoiceMonthKey || "";
   modal.feedback.textContent = "";
+  
+  // Limpar checkboxes e campos extras quando for nova transação
+  if (!tx) {
+    const installmentCheckbox = document.getElementById("installment-checkbox");
+    const financingCheckbox = document.getElementById("financing-checkbox");
+    const recurrenceCheckbox = document.getElementById("recurrence-checkbox");
+    const ruleCheckbox = document.getElementById("rule-checkbox");
+    
+    if (installmentCheckbox) installmentCheckbox.checked = false;
+    if (financingCheckbox) financingCheckbox.checked = false;
+    if (recurrenceCheckbox) recurrenceCheckbox.checked = false;
+    if (ruleCheckbox) ruleCheckbox.checked = false;
+    
+    // Esconder wrappers de inputs extras
+    const installmentInputWrapper = document.querySelector(".installment-input-wrapper");
+    const financingInputWrapper = document.querySelector(".financing-input-wrapper");
+    
+    if (installmentInputWrapper) installmentInputWrapper.classList.add("hidden");
+    if (financingInputWrapper) financingInputWrapper.classList.add("hidden");
+    
+    // Limpar valores dos campos extras
+    const installmentInput = document.querySelector("input[name='installments']");
+    const financingTotalInput = document.querySelector("input[name='financingTotal']");
+    const financingCurrentInput = document.querySelector("input[name='financingCurrent']");
+    
+    if (installmentInput) installmentInput.value = "";
+    if (financingTotalInput) financingTotalInput.value = "";
+    if (financingCurrentInput) financingCurrentInput.value = "1";
+    
+    // Limpar previews
+    const installmentPreview = document.querySelector(".installment-preview");
+    const financingPreview = document.querySelector(".financing-preview");
+    
+    if (installmentPreview) installmentPreview.textContent = "";
+    if (financingPreview) financingPreview.textContent = "";
+  }
   
   // Atualizar automaticamente o mês da fatura quando o cartão ou data mudar
   const updateInvoiceMonth = () => {
@@ -1405,6 +1565,22 @@ function parseRecurrence(description) {
   return { current: 1, total: 12 };
 }
 
+function parseFinancing(description) {
+  if (!description) {
+    return null;
+  }
+  const match = description.match(/\[FIN:(\d{1,3})\/(\d{1,3})\]/);
+  if (!match) {
+    return null;
+  }
+  const current = Number(match[1]);
+  const total = Number(match[2]);
+  if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 1) {
+    return null;
+  }
+  return { current, total };
+}
+
 function addMonths(monthKey, offset) {
   const [year, month] = monthKey.split("-").map(Number);
   const date = new Date(year, month - 1 + offset, 1);
@@ -1577,6 +1753,22 @@ async function renderTransactionList(title, items, options = {}) {
       installmentBadge.style.padding = "0.125rem 0.375rem";
       installmentBadge.style.borderRadius = "var(--radius-sm)";
       titleLine.appendChild(installmentBadge);
+    }
+    
+    // Indicador de financiamento
+    if (tx.financing && tx.financing.current && tx.financing.total) {
+      const financingBadge = document.createElement("span");
+      financingBadge.className = "financing-badge";
+      financingBadge.textContent = `💰 ${tx.financing.current}/${tx.financing.total}`;
+      financingBadge.style.marginLeft = "0.5rem";
+      financingBadge.style.fontSize = "0.75rem";
+      financingBadge.style.fontWeight = "600";
+      financingBadge.style.color = "#ea580c";
+      financingBadge.style.background = "#ffedd5";
+      financingBadge.style.padding = "0.125rem 0.375rem";
+      financingBadge.style.borderRadius = "var(--radius-sm)";
+      financingBadge.title = "Financiamento";
+      titleLine.appendChild(financingBadge);
     }
     
     // Indicador de recorrência
@@ -3115,8 +3307,64 @@ function createTransactionRepository(cardRepo) {
     }
     const installment = parseInstallment(withSuggestion.description);
     const recurrence = parseRecurrence(withSuggestion.description);
+    const financing = parseFinancing(withSuggestion.description);
     const monthKey = withSuggestion.monthKey;
     const baseInvoiceMonth = withSuggestion.invoiceMonthKey || monthKey;
+
+    // Processar financiamento (despesas com parcelas de mesmo valor)
+    if (financing && financing.current >= 1) {
+      const amountCents = Math.round((Number(withSuggestion.amount) || 0) * 100);
+      const groupId = hashString([
+        withSuggestion.description,
+        withSuggestion.date,
+        amountCents,
+        financing.total,
+      ].join("|"));
+      
+      // Remover notação de financiamento da descrição
+      const cleanDescription = withSuggestion.description.replace(/\s*\[FIN:\d{1,3}\/\d{1,3}\]\s*$/i, '').trim();
+      
+      const updates = {};
+      const recomputeTargets = new Set();
+
+      for (let index = financing.current; index <= financing.total; index += 1) {
+        const offset = index - financing.current;
+        const monthForFinancing = addMonths(monthKey, offset);
+        const invoiceMonthKey = withSuggestion.cardId
+          ? addMonths(baseInvoiceMonth, offset)
+          : undefined;
+        
+        const txRef = push(ref(db, `/users/${uid}/tx`));
+        const txId = txRef.key;
+        const payload = stripUndefined({
+          ...withSuggestion,
+          description: cleanDescription,
+          id: txId,
+          amount: amountCents / 100, // Mesmo valor para todas as parcelas
+          monthKey: monthForFinancing,
+          invoiceMonthKey,
+          isProjected: offset > 0,
+          financing: {
+            current: index,
+            total: financing.total,
+            groupId,
+          },
+        });
+        Object.assign(updates, buildTransactionUpdates(uid, txId, payload));
+        if (payload.cardId && payload.invoiceMonthKey) {
+          recomputeTargets.add(`${payload.cardId}::${payload.invoiceMonthKey}`);
+        }
+      }
+
+      await update(ref(db), updates);
+      await Promise.all(
+        Array.from(recomputeTargets).map((key) => {
+          const [cardId, invoiceMonthKey] = key.split("::");
+          return cardRepo.recomputeInvoiceMeta(cardId, invoiceMonthKey);
+        })
+      );
+      return { ...withSuggestion };
+    }
 
     // Processar recorrência (qualquer tipo de transação)
     if (recurrence && recurrence.current >= 1) {
