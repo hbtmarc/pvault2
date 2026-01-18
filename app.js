@@ -727,6 +727,24 @@ function createTransactionModal() {
     }
   });
   
+  // Mostrar/ocultar opção de crédito apenas para despesas
+  const toggleCreditOption = () => {
+    const isExpense = kindField.select.value === "expense";
+    creditWrapper.classList.toggle("hidden", !isExpense);
+    
+    if (!isExpense) {
+      creditCheckbox.checked = false;
+      creditInputWrapper.classList.add("hidden");
+      cardField.select.value = "";
+      invoiceField.select.value = "";
+      invoiceField.wrapper.classList.add("hidden");
+      installmentCheckbox.checked = false;
+      installmentInputWrapper.classList.add("hidden");
+      installmentInput.input.value = "";
+      installmentPreview.textContent = "";
+    }
+  };
+  
   // Mostrar/ocultar opção de financiamento apenas para despesas
   const toggleFinancingOption = () => {
     const isExpense = kindField.select.value === "expense";
@@ -741,7 +759,10 @@ function createTransactionModal() {
     }
   };
   
-  kindField.select.addEventListener("change", toggleFinancingOption);
+  kindField.select.addEventListener("change", () => {
+    toggleCreditOption();
+    toggleFinancingOption();
+  });
   
   const updateInstallmentPreview = () => {
     const amount = parseFloat(amountField.input.value) || 0;
@@ -1105,6 +1126,16 @@ async function openTransactionModal(tx = null) {
   // Atualizar visibilidade dos campos condicionais baseado nos valores
   const updateConditionalFields = () => {
     const isExpense = modal.fields.kind.value === "expense";
+    
+    // Mostrar/esconder crédito baseado em despesa
+    const creditSection = document.querySelector(".credit-section");
+    if (creditSection) {
+      if (isExpense) {
+        creditSection.classList.remove("hidden");
+      } else {
+        creditSection.classList.add("hidden");
+      }
+    }
     
     // Mostrar/esconder financiamento baseado em despesa
     const financingSection = document.querySelector(".financing-section");
