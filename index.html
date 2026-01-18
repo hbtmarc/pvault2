@@ -31,6 +31,26 @@
       </svg>
     </button>
 
+    <script>
+      // Suprimir erros de extensões do navegador (não são erros do app)
+      window.addEventListener('error', (event) => {
+        if (event.message && event.message.includes('Extension context invalidated')) {
+          event.preventDefault();
+        }
+      });
+      
+      // Suprimir avisos de runtime de extensões
+      const originalConsoleError = console.error;
+      console.error = function(...args) {
+        const message = args.join(' ');
+        if (message.includes('message port closed') || 
+            message.includes('Extension context invalidated') ||
+            message.includes('runtime.lastError')) {
+          return;
+        }
+        originalConsoleError.apply(console, args);
+      };
+    </script>
     <script type="module" src="app.js"></script>
   </body>
 </html>
