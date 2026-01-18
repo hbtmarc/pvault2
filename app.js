@@ -82,6 +82,7 @@ const monthState = {
 
 const authState = {
   user: null,
+  ready: false,
 };
 
 const merchantRulesState = {
@@ -528,16 +529,48 @@ function createTransactionModal() {
     categories
   );
   
-  const cardField = createSelect("Cartão (opcional)", "cardId", []);
-  const invoiceField = createSelect("Mês da fatura (opcional)", "invoiceMonthKey", []);
-  
-  cardField.select.required = false;
-  invoiceField.select.required = false;
   categoryField.select.required = false;
   
-  // Campo de parcelamento
+  // ============ SEÇÃO CRÉDITO ============
+  const creditWrapper = document.createElement("div");
+  creditWrapper.className = "credit-section";
+  
+  const creditLabel = document.createElement("label");
+  creditLabel.className = "checkbox";
+  const creditCheckbox = document.createElement("input");
+  creditCheckbox.type = "checkbox";
+  creditCheckbox.id = "credit-checkbox";
+  const creditText = document.createElement("span");
+  creditText.textContent = "Crédito";
+  creditLabel.append(creditCheckbox, creditText);
+  
+  const creditInputWrapper = document.createElement("div");
+  creditInputWrapper.className = "credit-input-wrapper hidden";
+  
+  // Campos de cartão e fatura dentro do wrapper de crédito
+  const cardField = createSelect("Cartão", "cardId", []);
+  const invoiceField = createSelect("Mês da fatura", "invoiceMonthKey", []);
+  
+  invoiceField.wrapper.classList.add("hidden");
+  cardField.select.required = false;
+  invoiceField.select.required = false;
+  
+  // Lógica para mostrar/esconder campo de mês da fatura
+  const toggleInvoiceField = () => {
+    const hasCard = cardField.select.value.trim() !== "";
+    if (hasCard) {
+      invoiceField.wrapper.classList.remove("hidden");
+    } else {
+      invoiceField.wrapper.classList.add("hidden");
+      invoiceField.select.value = "";
+    }
+  };
+  
+  cardField.select.addEventListener("change", toggleInvoiceField);
+  
+  // Campo de parcelamento dentro do crédito
   const installmentWrapper = document.createElement("div");
-  installmentWrapper.className = "installment-section hidden";
+  installmentWrapper.className = "installment-section";
   
   const installmentLabel = document.createElement("label");
   installmentLabel.className = "checkbox";
@@ -555,16 +588,17 @@ function createTransactionModal() {
   installmentInput.input.min = "2";
   installmentInput.input.max = "36";
   installmentInput.input.placeholder = "Ex: 12";
-  installmentInput.input.required = false; // Não é obrigatório por padrão
+  installmentInput.input.required = false;
   
   const installmentPreview = document.createElement("div");
   installmentPreview.className = "installment-preview";
-  installmentPreview.style.fontSize = "0.875rem";
-  installmentPreview.style.color = "var(--text-secondary)";
-  installmentPreview.style.marginTop = "0.5rem";
   
   installmentInputWrapper.append(installmentInput.wrapper, installmentPreview);
   installmentWrapper.append(installmentLabel, installmentInputWrapper);
+  
+  // Montar wrapper de crédito
+  creditInputWrapper.append(cardField.wrapper, invoiceField.wrapper, installmentWrapper);
+  creditWrapper.append(creditLabel, creditInputWrapper);
   
   // Campo de financiamento (apenas para despesas)
   const financingWrapper = document.createElement("div");
@@ -581,9 +615,6 @@ function createTransactionModal() {
   
   const financingInputWrapper = document.createElement("div");
   financingInputWrapper.className = "financing-input-wrapper hidden";
-  financingInputWrapper.style.display = "grid";
-  financingInputWrapper.style.gridTemplateColumns = "1fr 1fr";
-  financingInputWrapper.style.gap = "1rem";
   
   const financingTotalInput = createInput("Total de parcelas", "number", "financingTotal");
   financingTotalInput.input.min = "2";
@@ -599,13 +630,12 @@ function createTransactionModal() {
   
   const financingPreview = document.createElement("div");
   financingPreview.className = "financing-preview";
-  financingPreview.style.fontSize = "0.875rem";
-  financingPreview.style.color = "var(--text-secondary)";
-  financingPreview.style.marginTop = "0.5rem";
-  financingPreview.style.gridColumn = "1 / -1";
   
   financingInputWrapper.append(financingTotalInput.wrapper, financingCurrentInput.wrapper, financingPreview);
   financingWrapper.append(financingLabel, financingInputWrapper);
+  
+  // Garantir que financingInputWrapper comece escondido
+  financingInputWrapper.classList.add("hidden");
   
   // Campo de recorrência (receitas)
   const recurrenceWrapper = document.createElement("div");
@@ -622,39 +652,60 @@ function createTransactionModal() {
   
   recurrenceWrapper.append(recurrenceLabel);
   
-  // Desmarcar parcelamento se recorrência for marcada
-  recurrenceCheckbox.addEventListener("change", () => {
-    if (recurrenceCheckbox.checked) {
+  // ============ LÓGICA DE INTERAÇÃO ENTRE CHECKBOXES ============
+  
+  // Crédito
+  creditCheckbox.addEventListener("change", () => {
+    creditInputWrapper.classList.toggle("hidden", !creditCheckbox.checked);
+    if (!creditCheckbox.checked) {
+      cardField.select.value = "";
+      invoiceField.select.value = "";
+      invoiceField.wrapper.classList.add("hidden");
       installmentCheckbox.checked = false;
-      financingCheckbox.checked = false;
       installmentInputWrapper.classList.add("hidden");
-      financingInputWrapper.classList.add("hidden");
       installmentInput.input.value = "";
       installmentPreview.textContent = "";
+    } else {
+      // Se crédito for marcado, desmarcar financiamento e recorrência
+      financingCheckbox.checked = false;
+      recurrenceCheckbox.checked = false;
+      financingInputWrapper.classList.add("hidden");
       financingTotalInput.input.value = "";
       financingCurrentInput.input.value = "1";
       financingPreview.textContent = "";
     }
   });
   
-  // Lógica de parcelamento
+  // Parcelamento
   installmentCheckbox.addEventListener("change", () => {
     installmentInputWrapper.classList.toggle("hidden", !installmentCheckbox.checked);
     if (!installmentCheckbox.checked) {
       installmentInput.input.value = "";
       installmentPreview.textContent = "";
-    } else {
-      // Se parcelamento for marcado, desmarcar recorrência e financiamento
-      recurrenceCheckbox.checked = false;
+    }
+  });
+  
+  // Recorrência
+  recurrenceCheckbox.addEventListener("change", () => {
+    if (recurrenceCheckbox.checked) {
+      creditCheckbox.checked = false;
       financingCheckbox.checked = false;
+      creditInputWrapper.classList.add("hidden");
       financingInputWrapper.classList.add("hidden");
+      cardField.select.value = "";
+      invoiceField.select.value = "";
+      invoiceField.wrapper.classList.add("hidden");
+      installmentCheckbox.checked = false;
+      installmentInputWrapper.classList.add("hidden");
+      installmentInput.input.value = "";
+      installmentPreview.textContent = "";
       financingTotalInput.input.value = "";
       financingCurrentInput.input.value = "1";
       financingPreview.textContent = "";
     }
   });
   
-  // Lógica de financiamento
+  // Financiamento
   financingCheckbox.addEventListener("change", () => {
     financingInputWrapper.classList.toggle("hidden", !financingCheckbox.checked);
     if (!financingCheckbox.checked) {
@@ -662,9 +713,14 @@ function createTransactionModal() {
       financingCurrentInput.input.value = "1";
       financingPreview.textContent = "";
     } else {
-      // Se financiamento for marcado, desmarcar parcelamento e recorrência
-      installmentCheckbox.checked = false;
+      // Se financiamento for marcado, desmarcar crédito e recorrência
+      creditCheckbox.checked = false;
       recurrenceCheckbox.checked = false;
+      creditInputWrapper.classList.add("hidden");
+      cardField.select.value = "";
+      invoiceField.select.value = "";
+      invoiceField.wrapper.classList.add("hidden");
+      installmentCheckbox.checked = false;
       installmentInputWrapper.classList.add("hidden");
       installmentInput.input.value = "";
       installmentPreview.textContent = "";
@@ -728,35 +784,10 @@ function createTransactionModal() {
   installmentInput.input.addEventListener("input", updateInstallmentPreview);
   financingTotalInput.input.addEventListener("input", updateFinancingPreview);
   financingCurrentInput.input.addEventListener("input", updateFinancingPreview);
-  
-  // Mostrar/ocultar opção de parcelamento baseado em cartão + tipo despesa
-  const toggleInstallmentOption = () => {
-    const hasCard = cardField.select.value !== "";
-    const isExpense = kindField.select.value === "expense";
-    installmentWrapper.classList.toggle("hidden", !hasCard || !isExpense);
-    
-    if (!hasCard || !isExpense) {
-      installmentCheckbox.checked = false;
-      installmentInputWrapper.classList.add("hidden");
-      installmentInput.input.value = "";
-      installmentPreview.textContent = "";
-    }
-  };
-  
-  cardField.select.addEventListener("change", toggleInstallmentOption);
-  kindField.select.addEventListener("change", toggleInstallmentOption);
 
   const feedback = document.createElement("p");
   feedback.className = "form-feedback";
   feedback.textContent = "";
-
-  const ruleLabel = document.createElement("label");
-  ruleLabel.className = "checkbox";
-  const ruleCheckbox = document.createElement("input");
-  ruleCheckbox.type = "checkbox";
-  const ruleText = document.createElement("span");
-  ruleText.textContent = "Sempre categorizar assim";
-  ruleLabel.append(ruleCheckbox, ruleText);
 
   const actions = document.createElement("div");
   actions.className = "actions";
@@ -774,12 +805,9 @@ function createTransactionModal() {
     amountField.wrapper,
     kindField.wrapper,
     categoryField.wrapper,
-    cardField.wrapper,
-    invoiceField.wrapper,
-    installmentWrapper,
+    creditWrapper,
     financingWrapper,
     recurrenceWrapper,
-    ruleLabel,
     feedback,
     actions
   );
@@ -860,9 +888,6 @@ function createTransactionModal() {
         await transactionRepository.createTransaction(payload);
       }
       
-      if (ruleCheckbox.checked && payload.categoryId) {
-        await saveMerchantRule(payload.description, payload.categoryId);
-      }
       closeTransactionModal();
       await renderRoute();
     } catch (error) {
@@ -1077,22 +1102,42 @@ async function openTransactionModal(tx = null) {
   modal.fields.invoiceMonthKey.value = tx?.invoiceMonthKey || "";
   modal.feedback.textContent = "";
   
+  // Atualizar visibilidade dos campos condicionais baseado nos valores
+  const updateConditionalFields = () => {
+    const isExpense = modal.fields.kind.value === "expense";
+    
+    // Mostrar/esconder financiamento baseado em despesa
+    const financingSection = document.querySelector(".financing-section");
+    if (financingSection) {
+      if (isExpense) {
+        financingSection.classList.remove("hidden");
+      } else {
+        financingSection.classList.add("hidden");
+      }
+    }
+  };
+  
+  // Executar ao abrir modal
+  updateConditionalFields();
+  
   // Limpar checkboxes e campos extras quando for nova transação
   if (!tx) {
+    const creditCheckbox = document.getElementById("credit-checkbox");
     const installmentCheckbox = document.getElementById("installment-checkbox");
     const financingCheckbox = document.getElementById("financing-checkbox");
     const recurrenceCheckbox = document.getElementById("recurrence-checkbox");
-    const ruleCheckbox = document.getElementById("rule-checkbox");
     
+    if (creditCheckbox) creditCheckbox.checked = false;
     if (installmentCheckbox) installmentCheckbox.checked = false;
     if (financingCheckbox) financingCheckbox.checked = false;
     if (recurrenceCheckbox) recurrenceCheckbox.checked = false;
-    if (ruleCheckbox) ruleCheckbox.checked = false;
     
     // Esconder wrappers de inputs extras
+    const creditInputWrapper = document.querySelector(".credit-input-wrapper");
     const installmentInputWrapper = document.querySelector(".installment-input-wrapper");
     const financingInputWrapper = document.querySelector(".financing-input-wrapper");
     
+    if (creditInputWrapper) creditInputWrapper.classList.add("hidden");
     if (installmentInputWrapper) installmentInputWrapper.classList.add("hidden");
     if (financingInputWrapper) financingInputWrapper.classList.add("hidden");
     
@@ -1126,6 +1171,10 @@ async function openTransactionModal(tx = null) {
       modal.fields.invoiceMonthKey.value = "";
     }
   };
+  
+  // Remover listeners antigos antes de adicionar novos (evitar duplicação)
+  modal.fields.cardId.removeEventListener('change', updateInvoiceMonth);
+  modal.fields.date.removeEventListener('change', updateInvoiceMonth);
   
   // Listeners para atualização automática
   modal.fields.cardId.addEventListener('change', updateInvoiceMonth);
@@ -2968,6 +3017,10 @@ async function renderRoute() {
   const routeKey = normalizeRoute(getRoute());
 
   if (routeKey === "#/login") {
+    if (authState.ready && authState.user) {
+      navigateTo("#/app/dashboard");
+      return;
+    }
     renderLogin();
     return;
   }
@@ -2987,6 +3040,10 @@ async function renderRoute() {
     appView.style.display = '';
     appView.style.alignItems = '';
     appView.style.justifyContent = '';
+  }
+
+  if (routeKey.startsWith("#/app/") && !authState.ready) {
+    return;
   }
 
   if (routeKey.startsWith("#/app/") && !authState.user) {
@@ -3094,6 +3151,7 @@ function handleHashChange() {
 function initAuth() {
   onAuthChange((user) => {
     authState.user = user;
+    authState.ready = true;
     if (!user && getRoute().startsWith("#/app/")) {
       redirectToLogin();
       return;

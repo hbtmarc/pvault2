@@ -32,6 +32,9 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
+// Configurar persistência padrão como LOCAL para manter o usuário logado
+setPersistence(auth, browserLocalPersistence);
+
 async function signIn(email, password, rememberMe = true) {
   const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
   await setPersistence(auth, persistence);
