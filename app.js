@@ -568,7 +568,7 @@ function createTransactionModal() {
   
   // Campo de recorrência (receitas)
   const recurrenceWrapper = document.createElement("div");
-  recurrenceWrapper.className = "recurrence-section hidden";
+  recurrenceWrapper.className = "recurrence-section";
   
   const recurrenceLabel = document.createElement("label");
   recurrenceLabel.className = "checkbox";
@@ -576,7 +576,7 @@ function createTransactionModal() {
   recurrenceCheckbox.type = "checkbox";
   recurrenceCheckbox.id = "recurrence-checkbox";
   const recurrenceText = document.createElement("span");
-  recurrenceText.textContent = "Receita recorrente (criar 12 meses)";
+  recurrenceText.textContent = "Transação recorrente (criar 12 meses)";
   recurrenceLabel.append(recurrenceCheckbox, recurrenceText);
   
   recurrenceWrapper.append(recurrenceLabel);
@@ -590,18 +590,6 @@ function createTransactionModal() {
       installmentPreview.textContent = "";
     }
   });
-  
-  // Mostrar/ocultar opção de recorrência apenas para receitas
-  const toggleRecurrenceOption = () => {
-    const isIncome = kindField.select.value === "income";
-    recurrenceWrapper.classList.toggle("hidden", !isIncome);
-    
-    if (!isIncome) {
-      recurrenceCheckbox.checked = false;
-    }
-  };
-  
-  kindField.select.addEventListener("change", toggleRecurrenceOption);
   
   // Lógica de parcelamento
   installmentCheckbox.addEventListener("change", () => {
@@ -734,8 +722,8 @@ function createTransactionModal() {
       }
       
       // Se for recorrente, marcar na descrição para criar 12 meses
-      if (isRecurrent && payload.kind === "income") {
-        payload.description = `${payload.description} [REC:1/12]`;
+      if (isRecurrent) {
+        payload.description = `${payload.description} [REC]`;
       }
       
       // Criar transação (o sistema criará as parcelas/recorrências automaticamente)
@@ -1409,16 +1397,12 @@ function parseRecurrence(description) {
   if (!description) {
     return null;
   }
-  const match = description.match(/\[REC:(\d{1,2})\/(\d{1,2})\]/);
+  const match = description.match(/\[REC\]/);
   if (!match) {
     return null;
   }
-  const current = Number(match[1]);
-  const total = Number(match[2]);
-  if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 1) {
-    return null;
-  }
-  return { current, total };
+  // Retornar objeto indicando recorrência de 12 meses
+  return { current: 1, total: 12 };
 }
 
 function addMonths(monthKey, offset) {
@@ -1520,7 +1504,9 @@ function formatDateLabel(dateString) {
   if (!dateString) {
     return "";
   }
-  const date = new Date(dateString);
+  // Para evitar problema de timezone, criar data local parseando manualmente
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
   return date.toLocaleDateString("pt-BR");
 }
 
@@ -1594,17 +1580,18 @@ async function renderTransactionList(title, items, options = {}) {
     }
     
     // Indicador de recorrência
-    if (tx.recurrence && tx.recurrence.current && tx.recurrence.total) {
+    if (tx.recurrence && tx.recurrence.groupId) {
       const recurrenceBadge = document.createElement("span");
       recurrenceBadge.className = "recurrence-badge";
-      recurrenceBadge.textContent = `Rec ${tx.recurrence.current}/${tx.recurrence.total}`;
+      recurrenceBadge.textContent = "⟳"; // Símbolo de ciclo
       recurrenceBadge.style.marginLeft = "0.5rem";
-      recurrenceBadge.style.fontSize = "0.75rem";
+      recurrenceBadge.style.fontSize = "0.875rem";
       recurrenceBadge.style.fontWeight = "600";
       recurrenceBadge.style.color = "#059669";
       recurrenceBadge.style.background = "#d1fae5";
       recurrenceBadge.style.padding = "0.125rem 0.375rem";
       recurrenceBadge.style.borderRadius = "var(--radius-sm)";
+      recurrenceBadge.title = "Transação recorrente";
       titleLine.appendChild(recurrenceBadge);
     }
     
@@ -3131,8 +3118,8 @@ function createTransactionRepository(cardRepo) {
     const monthKey = withSuggestion.monthKey;
     const baseInvoiceMonth = withSuggestion.invoiceMonthKey || monthKey;
 
-    // Processar recorrência (receitas)
-    if (recurrence && recurrence.current >= 1 && withSuggestion.kind === "income") {
+    // Processar recorrência (qualquer tipo de transação)
+    if (recurrence && recurrence.current >= 1) {
       const amountCents = Math.round((Number(withSuggestion.amount) || 0) * 100);
       const groupId = hashString([
         withSuggestion.description,
@@ -3142,7 +3129,7 @@ function createTransactionRepository(cardRepo) {
       ].join("|"));
       
       // Remover notação de recorrência da descrição
-      const cleanDescription = withSuggestion.description.replace(/\s*\[REC:\d{1,2}\/\d{1,2}\]\s*$/i, '').trim();
+      const cleanDescription = withSuggestion.description.replace(/\s*\[REC\]\s*$/i, '').trim();
       
       const updates = {};
       const recomputeTargets = new Set();
