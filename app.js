@@ -1079,6 +1079,36 @@ function createTransactionModal() {
       // IMPORTANTE: Ao editar transação, NÃO criar novas parcelas/financiamentos/recorrências
       // Apenas atualizar a transação individual
       const isEditing = transactionModal?.txId;
+
+      if (!isEditing && payload.kind === "expense" && payload.cardId) {
+        const cardInfo = await cardRepository.getCard(payload.cardId);
+        const cardLimitCents = Number(cardInfo?.limitCents) || 0;
+
+        const projection = await computeCardInvoiceProjection(payload.cardId);
+        const unpaidTotalCents = projection.monthData.reduce((sum, item) => {
+          if (item.paid) return sum;
+          return sum + (projection.adjustedMap[item.monthKey] || 0);
+        }, 0);
+
+        const plannedAddTotalCents = (() => {
+          const baseAmountCents = Math.round(finalAmount * 100);
+          if (installments > 1) {
+            return baseAmountCents; // total da compra parcelada
+          }
+          return baseAmountCents; // assinatura conta apenas a competência atual
+        })();
+
+        const availableBefore = cardLimitCents - unpaidTotalCents;
+        if (availableBefore <= 0) {
+          feedback.textContent = "Cartão sem limite disponível.";
+          return;
+        }
+        if (plannedAddTotalCents > availableBefore) {
+          const missingCents = plannedAddTotalCents - Math.max(availableBefore, 0);
+          feedback.textContent = `Cartão sem limite disponível. Falta ${formatCurrencyFromCents(missingCents)} para registrar esta despesa.`;
+          return;
+        }
+      }
       
       if (!isEditing) {
         // Apenas para NOVAS transações: adicionar notações de agrupamento
@@ -2186,6 +2216,26 @@ function sortByDateDesc(list) {
   });
 }
 
+function sortCardsByName(cards) {
+  const normalize = (value) =>
+    (value || "")
+      .toString()
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+
+  return [...cards].sort((a, b) => {
+    const nameA = normalize(a?.name);
+    const nameB = normalize(b?.name);
+    const byName = nameA.localeCompare(nameB, "pt-BR", {
+      sensitivity: "base",
+      numeric: true,
+    });
+    if (byName !== 0) return byName;
+    return (a?.id || "").localeCompare(b?.id || "");
+  });
+}
+
 async function renderTransactionList(title, items, options = {}) {
   const wrapper = document.createElement("section");
   wrapper.className = "card";
@@ -2204,13 +2254,22 @@ async function renderTransactionList(title, items, options = {}) {
   }
 
   // Buscar todos os cartões uma vez para criar um cache
-  const cards = await cardRepository.listCards();
+  const cards = sortCardsByName(await cardRepository.listCards());
   const cardMap = new Map();
   cards.forEach(card => cardMap.set(card.id, card.name));
 
   items.forEach((tx) => {
     const row = document.createElement("div");
     row.className = "transaction-row";
+
+    const normalizedDescription = (tx.description || "").toLowerCase();
+    const isAdvanceNegative =
+      normalizedDescription.includes("adiantamento") &&
+      Number(tx.amount) < 0;
+
+    if (isAdvanceNegative) {
+      row.classList.add("transaction-advance");
+    }
 
     const content = document.createElement("div");
     content.className = "transaction-content";
@@ -2295,7 +2354,10 @@ async function renderTransactionList(title, items, options = {}) {
     // Mostrar como valor positivo em verde
     const isInvoiceAdvance = tx.kind === "income" && tx.cardId && tx.invoiceMonthKey;
     
-    if (isInvoiceAdvance) {
+    if (isAdvanceNegative) {
+      amount.classList.add("advance");
+      amount.textContent = formatCurrency(Math.abs(tx.amount));
+    } else if (isInvoiceAdvance) {
       amount.classList.add("income");
       // Inverter o sinal: receita já é negativa no cálculo, mas exibir como positiva
       amount.textContent = formatCurrency(Math.abs(tx.amount));
@@ -2545,6 +2607,71 @@ async function renderTransactions() {
   appView.append(list, addButton);
 }
 
+async function computeCardInvoiceProjection(cardId) {
+  const uid = getUserId();
+  const invoicesSnapshot = await get(ref(db, `/users/${uid}/invoices/${cardId}`));
+
+  if (!invoicesSnapshot.exists()) {
+    return {
+      monthData: [],
+      adjustedMap: {},
+      carryBeforeMap: {},
+    };
+  }
+
+  const invoices = invoicesSnapshot.val();
+  const monthKeys = Object.keys(invoices).sort();
+
+  const monthData = await Promise.all(
+    monthKeys.map(async (monthKey) => {
+      const txList = await transactionRepository.listInvoiceTransactions(
+        cardId,
+        monthKey
+      );
+      const invoiceItems = txList.filter((tx) =>
+        ["expense", "income"].includes(tx.kind)
+      );
+      const expenseTotalCents = invoiceItems.reduce((sum, tx) => {
+        if (tx.kind !== "expense") return sum;
+        const value = Number(tx.amount) || 0;
+        return sum + Math.round(value * 100);
+      }, 0);
+      const limitItems = invoiceItems.filter(
+        (tx) => !(tx.subscription && tx.isProjected)
+      );
+      const totalCents = getInvoiceTotalCents(invoiceItems);
+      const limitTotalCents = getInvoiceTotalCents(limitItems);
+      const paid = Boolean(invoices[monthKey]?.meta?.paid);
+      return { monthKey, totalCents, limitTotalCents, expenseTotalCents, paid };
+    })
+  );
+
+  monthData.sort((a, b) => a.monthKey.localeCompare(b.monthKey));
+
+  let carry = 0;
+  let limitCarry = 0;
+  const adjustedMap = {};
+  const carryBeforeMap = {};
+  const limitAdjustedMap = {};
+  const limitCarryBeforeMap = {};
+
+  monthData.forEach((item) => {
+    carryBeforeMap[item.monthKey] = carry;
+    const base = item.totalCents + carry;
+    const adjusted = Math.max(0, base);
+    carry = base - adjusted;
+    adjustedMap[item.monthKey] = adjusted;
+
+    limitCarryBeforeMap[item.monthKey] = limitCarry;
+    const limitBase = item.limitTotalCents + limitCarry;
+    const limitAdjusted = Math.max(0, limitBase);
+    limitCarry = limitBase - limitAdjusted;
+    limitAdjustedMap[item.monthKey] = limitAdjusted;
+  });
+
+  return { monthData, adjustedMap, carryBeforeMap, limitAdjustedMap, limitCarryBeforeMap };
+}
+
 async function renderCards() {
   const cardForm = document.createElement("form");
   cardForm.className = "card form";
@@ -2633,7 +2760,7 @@ async function renderCards() {
     }
   });
 
-  const cards = await cardRepository.listCards();
+  const cards = sortCardsByName(await cardRepository.listCards());
 
   const cardsSection = document.createElement("section");
   cardsSection.className = "card";
@@ -2657,12 +2784,42 @@ async function renderCards() {
     empty.append(emptyText);
     cardsSection.append(cardsHeader, empty);
   } else {
-    await Promise.all(
+    // Usar o mês selecionado pelo usuário (visão de futuro)
+    const selectedMonth = monthState.current;
+    
+    const cardWrappers = await Promise.all(
       cards.map(async (card) => {
-        const unpaidTotalCents = await cardRepository.getUnpaidTotalCents(
-          card.id
+        const projection = await computeCardInvoiceProjection(card.id);
+        const monthData = projection.monthData;
+        const adjustedMap = projection.adjustedMap;
+
+        const currentMonthAdjusted = adjustedMap[selectedMonth] || 0;
+        const currentMonthMeta = monthData.find(
+          (item) => item.monthKey === selectedMonth
         );
-        const availableCents = (Number(card.limitCents) || 0) - unpaidTotalCents;
+        const currentMonthTotal = currentMonthMeta?.paid
+          ? 0
+          : currentMonthAdjusted;
+
+        let futureMonthsRaw = 0;
+
+        monthData.forEach((item) => {
+          if (item.paid) {
+            return;
+          }
+
+          if (item.monthKey > selectedMonth) {
+            futureMonthsRaw += Math.max(0, item.expenseTotalCents || 0);
+          }
+        });
+
+        const limitCents = Number(card.limitCents) || 0;
+        const maxFutureAllowed = Math.max(0, limitCents - currentMonthTotal);
+        const futureMonthsTotal = Math.min(futureMonthsRaw, maxFutureAllowed);
+        const availableCents = Math.max(
+          limitCents - currentMonthTotal - futureMonthsTotal,
+          0
+        );
 
         const cardWrapper = document.createElement("div");
         cardWrapper.style.position = "relative";
@@ -2677,31 +2834,47 @@ async function renderCards() {
         const title = document.createElement("h3");
         title.textContent = card.name || "Cartão";
 
-        const limit = document.createElement("div");
-        limit.className = "card-item-label";
-        limit.textContent = "Limite";
+        // Limite total
+        const limitLabel = document.createElement("div");
+        limitLabel.className = "card-item-label";
+        limitLabel.textContent = "LIMITE";
         
         const limitValue = document.createElement("div");
         limitValue.className = "card-item-value";
-        limitValue.textContent = formatCurrencyFromCents(card.limitCents);
+        limitValue.textContent = formatCurrencyFromCents(limitCents);
 
-        const unpaid = document.createElement("div");
-        unpaid.className = "card-item-label";
-        unpaid.textContent = "Em aberto";
-        unpaid.style.marginTop = "0.5rem";
+        // Fatura atual
+        const currentLabel = document.createElement("div");
+        currentLabel.className = "card-item-label";
+        const monthLabel = formatMonthLabel(selectedMonth);
+        currentLabel.textContent = `FATURA ATUAL (${monthLabel})`;
+        currentLabel.style.marginTop = "0.5rem";
         
-        const unpaidValue = document.createElement("div");
-        unpaidValue.className = "card-item-value";
-        unpaidValue.textContent = formatCurrencyFromCents(unpaidTotalCents);
+        const currentValue = document.createElement("div");
+        currentValue.className = "card-item-value";
+        currentValue.textContent = formatCurrencyFromCents(currentMonthTotal);
 
-        const available = document.createElement("div");
-        available.className = "card-item-label";
-        available.textContent = "Disponível";
-        available.style.marginTop = "0.5rem";
+        // Próximas faturas
+        const futureLabel = document.createElement("div");
+        futureLabel.className = "card-item-label";
+        futureLabel.textContent = "PRÓXIMAS FATURAS";
+        futureLabel.style.marginTop = "0.5rem";
+        
+        const futureValue = document.createElement("div");
+        futureValue.className = "card-item-value";
+        futureValue.textContent = formatCurrencyFromCents(futureMonthsTotal);
+
+        // Disponível
+        const availableLabel = document.createElement("div");
+        availableLabel.className = "card-item-label";
+        availableLabel.textContent = "DISPONÍVEL";
+        availableLabel.style.marginTop = "0.5rem";
         
         const availableValue = document.createElement("div");
         availableValue.className = "card-item-value";
-        availableValue.style.color = availableCents > 0 ? "var(--success)" : "var(--danger)";
+        availableValue.style.color = availableCents > 0
+          ? "var(--success)"
+          : "var(--text-primary)";
         availableValue.textContent = formatCurrencyFromCents(availableCents);
 
         const link = document.createElement("button");
@@ -2713,7 +2886,18 @@ async function renderCards() {
           navigateTo(`#/app/invoices?cardId=${card.id}&m=${monthState.current}`);
         });
 
-        cardItem.append(title, limit, limitValue, unpaid, unpaidValue, available, availableValue, link);
+        cardItem.append(
+          title, 
+          limitLabel, 
+          limitValue, 
+          currentLabel, 
+          currentValue, 
+          futureLabel, 
+          futureValue, 
+          availableLabel, 
+          availableValue, 
+          link
+        );
 
         const actions = document.createElement("div");
         actions.className = "card-actions-hidden";
@@ -2789,9 +2973,12 @@ async function renderCards() {
         cardItem.addEventListener('touchend', handleEnd);
         cardItem.addEventListener('mouseleave', handleEnd);
 
-        cardsGrid.append(cardWrapper);
+        return cardWrapper;
       })
     );
+    cardWrappers.forEach((cardWrapper) => {
+      cardsGrid.append(cardWrapper);
+    });
     cardsSection.append(cardsHeader, cardsGrid);
   }
 
@@ -2802,7 +2989,7 @@ async function renderInvoices() {
   const cardId = getQueryParam("cardId");
   
   // Cards de seleção de cartões
-  const cards = await cardRepository.listCards();
+  const cards = sortCardsByName(await cardRepository.listCards());
   
   if (!cards.length) {
     const empty = createCard(
@@ -2895,20 +3082,38 @@ async function renderInvoices() {
     const invoiceItems = invoiceTransactions.filter((tx) =>
       ["expense", "income"].includes(tx.kind)
     );
-    const total = invoiceItems.reduce((sum, tx) => {
-      const value = Number(tx.amount) || 0;
-      return tx.kind === "income" ? sum - value : sum + value;
-    }, 0);
+    const totalCents = getInvoiceTotalCents(invoiceItems);
 
     const meta = await cardRepository.getInvoiceMeta(cardId, selectedMonth);
     const paid = Boolean(meta?.paid);
+
+    const projection = await computeCardInvoiceProjection(cardId);
+    const adjustedCents = projection.adjustedMap[selectedMonth] ?? Math.max(0, totalCents);
+    const carryBefore = projection.carryBeforeMap[selectedMonth] ?? 0;
 
     const invoiceSummary = document.createElement("section");
     invoiceSummary.className = "card";
     const summaryTitle = document.createElement("h2");
     summaryTitle.textContent = `Fatura ${formatMonthLabel(selectedMonth)}`;
     const totalLine = document.createElement("p");
-    totalLine.textContent = `Total: ${formatCurrency(total)}`;
+    const hasCreditThisMonth = totalCents < 0;
+    totalLine.textContent = `Total: ${formatCurrencyFromCents(hasCreditThisMonth ? 0 : adjustedCents)}`;
+
+    let creditGeneratedLine = null;
+    if (hasCreditThisMonth) {
+      creditGeneratedLine = document.createElement("p");
+      creditGeneratedLine.textContent = `Crédito gerado na fatura: ${formatCurrencyFromCents(Math.abs(totalCents))}`;
+      creditGeneratedLine.style.color = "var(--success)";
+      creditGeneratedLine.style.fontWeight = "600";
+    }
+    
+    let creditLine = null;
+    if (carryBefore < 0) {
+      creditLine = document.createElement("p");
+      creditLine.textContent = `Crédito anterior aplicado: ${formatCurrencyFromCents(Math.abs(carryBefore))}`;
+      creditLine.style.color = "var(--success)";
+      creditLine.style.fontWeight = "600";
+    }
     const statusLine = document.createElement("p");
     statusLine.textContent = `Status: ${paid ? "paga" : "aberta"}`;
 
@@ -2921,7 +3126,7 @@ async function renderInvoices() {
         onClick: async () => {
           await cardRepository.setInvoicePaid(cardId, selectedMonth, {
             paid: true,
-            totalCents: Math.round(total * 100),
+            totalCents,
           });
           await renderInvoiceContent(selectedMonth);
         },
@@ -2933,7 +3138,7 @@ async function renderInvoices() {
         onClick: async () => {
           await cardRepository.setInvoicePaid(cardId, selectedMonth, {
             paid: false,
-            totalCents: Math.round(total * 100),
+            totalCents,
           });
           await renderInvoiceContent(selectedMonth);
         },
@@ -2953,7 +3158,14 @@ async function renderInvoices() {
     });
     buttonContainer.append(newTransactionButton);
 
-    invoiceSummary.append(summaryTitle, totalLine, statusLine, buttonContainer);
+    invoiceSummary.append(
+      summaryTitle,
+      totalLine,
+      ...(creditGeneratedLine ? [creditGeneratedLine] : []),
+      ...(creditLine ? [creditLine] : []),
+      statusLine,
+      buttonContainer
+    );
 
     const txList = await renderTransactionList(
       "Transações da fatura",
@@ -3559,6 +3771,10 @@ async function renderRoute() {
     return;
   }
 
+  if (routeKey.startsWith("#/app/")) {
+    await markHistoricalInvoicesPaid("2026-01");
+  }
+
   const route = routes[routeKey] || routes["#/app/dashboard"];
 
   const headline = createCard(route.title, route.description);
@@ -3704,6 +3920,50 @@ function getInvoiceTotalCents(transactions) {
     const cents = Math.round(value * 100);
     return tx.kind === "income" ? sum - cents : sum + cents;
   }, 0);
+}
+
+async function markHistoricalInvoicesPaid(cutoffMonthKey = "2026-01") {
+  const uid = getUserId();
+  const cards = await cardRepository.listCards();
+  const updates = {};
+  const touchedCards = new Set();
+
+  await Promise.all(
+    cards.map(async (card) => {
+      const invoicesSnap = await get(ref(db, `/users/${uid}/invoices/${card.id}`));
+      if (!invoicesSnap.exists()) return;
+
+      const invoices = invoicesSnap.val();
+      const monthKeys = Object.keys(invoices).filter((m) => m < cutoffMonthKey);
+
+      if (!monthKeys.length) return;
+
+      await Promise.all(
+        monthKeys.map(async (monthKey) => {
+          const txList = await transactionRepository.listInvoiceTransactions(card.id, monthKey);
+          const invoiceItems = txList.filter((tx) => ["expense", "income"].includes(tx.kind));
+          const totalCents = getInvoiceTotalCents(invoiceItems);
+          const currentMeta = invoices[monthKey]?.meta || {};
+
+          updates[`/users/${uid}/invoices/${card.id}/${monthKey}/meta`] = stripUndefined({
+            ...currentMeta,
+            paid: true,
+            paidAt: currentMeta.paidAt || Date.now(),
+            totalCents,
+            monthKey,
+          });
+          touchedCards.add(card.id);
+        })
+      );
+    })
+  );
+
+  if (Object.keys(updates).length) {
+    await update(ref(db), updates);
+    await Promise.all(
+      Array.from(touchedCards).map((cardId) => cardRepository.recomputeCardUnpaidTotal(cardId))
+    );
+  }
 }
 
 function createCardRepository() {

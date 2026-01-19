@@ -696,6 +696,10 @@ select option:checked {
   user-select: none;
 }
 
+.transaction-row.transaction-advance .transaction-content {
+  background: #ecfdf3;
+}
+
 .transaction-actions-hidden {
   position: absolute;
   right: 0;
@@ -757,6 +761,10 @@ select option:checked {
 
 .transaction-amount.expense {
   color: var(--danger);
+}
+
+.transaction-amount.advance {
+  color: var(--success);
 }
 
 .transaction-description {
