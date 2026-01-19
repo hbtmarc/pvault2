@@ -580,8 +580,8 @@ function createTransactionModal() {
     let invoiceMonth = txDate.getMonth();
     let invoiceYear = txDate.getFullYear();
     
-    // Se a compra foi DEPOIS do fechamento, vai para a fatura do próximo mês
-    if (txDay > closingDay) {
+    // Se a compra foi NO DIA ou DEPOIS do fechamento, vai para a fatura do próximo mês
+    if (txDay >= closingDay) {
       invoiceMonth += 1;
       if (invoiceMonth > 11) {
         invoiceMonth = 0;
@@ -615,6 +615,27 @@ function createTransactionModal() {
       autoCalculateInvoiceMonth();
     }
   });
+  
+  // Checkbox para definir se o valor é total ou por parcela
+  const totalValueLabel = document.createElement("label");
+  totalValueLabel.className = "checkbox";
+  totalValueLabel.style.marginTop = "0.75rem";
+  totalValueLabel.style.padding = "0.5rem";
+  totalValueLabel.style.background = "#f0f9ff";
+  totalValueLabel.style.borderRadius = "var(--radius-sm)";
+  totalValueLabel.style.border = "1px solid rgba(14, 165, 233, 0.2)";
+  totalValueLabel.classList.add("hidden"); // Escondido por padrão
+  
+  const totalValueCheckbox = document.createElement("input");
+  totalValueCheckbox.type = "checkbox";
+  totalValueCheckbox.id = "total-value-checkbox";
+  totalValueCheckbox.checked = false; // Desmarcado por padrão (dividir valor total)
+  
+  const totalValueText = document.createElement("span");
+  totalValueText.textContent = "Valor por parcela (compra já em andamento)";
+  totalValueText.style.fontSize = "0.8125rem";
+  
+  totalValueLabel.append(totalValueCheckbox, totalValueText);
   
   // Campo de parcelamento dentro do crédito
   const installmentWrapper = document.createElement("div");
@@ -651,7 +672,7 @@ function createTransactionModal() {
   installmentWrapper.append(installmentLabel, installmentInputWrapper);
   
   // Montar wrapper de crédito
-  creditInputWrapper.append(cardField.wrapper, invoiceField.wrapper, installmentWrapper);
+  creditInputWrapper.append(cardField.wrapper, invoiceField.wrapper, totalValueLabel, installmentWrapper);
   creditWrapper.append(creditLabel, creditInputWrapper);
   
   // Campo de financiamento (apenas para despesas)
@@ -717,6 +738,8 @@ function createTransactionModal() {
       invoiceField.wrapper.classList.add("hidden");
       installmentCheckbox.checked = false;
       installmentInputWrapper.classList.add("hidden");
+      totalValueLabel.classList.add("hidden"); // Esconder checkbox de valor
+      totalValueCheckbox.checked = false; // Resetar checkbox
       installmentInput.input.value = "";
       installmentCurrentInput.input.value = "1";
       installmentPreview.textContent = "";
@@ -733,11 +756,15 @@ function createTransactionModal() {
   
   // Parcelamento
   installmentCheckbox.addEventListener("change", () => {
-    installmentInputWrapper.classList.toggle("hidden", !installmentCheckbox.checked);
-    if (!installmentCheckbox.checked) {
+    const isChecked = installmentCheckbox.checked;
+    installmentInputWrapper.classList.toggle("hidden", !isChecked);
+    totalValueLabel.classList.toggle("hidden", !isChecked); // Mostrar/esconder checkbox de valor
+    
+    if (!isChecked) {
       installmentInput.input.value = "";
       installmentCurrentInput.input.value = "1";
       installmentPreview.textContent = "";
+      totalValueCheckbox.checked = false; // Resetar ao desmarcar parcelamento
     }
   });
   
@@ -798,6 +825,8 @@ function createTransactionModal() {
       invoiceField.wrapper.classList.add("hidden");
       installmentCheckbox.checked = false;
       installmentInputWrapper.classList.add("hidden");
+      totalValueLabel.classList.add("hidden"); // Esconder checkbox de valor
+      totalValueCheckbox.checked = false; // Resetar checkbox
       installmentInput.input.value = "";
       installmentCurrentInput.input.value = "1";
       installmentPreview.textContent = "";
@@ -827,15 +856,29 @@ function createTransactionModal() {
     const amount = parseFloat(amountField.input.value) || 0;
     const installments = parseInt(installmentInput.input.value) || 0;
     const current = parseInt(installmentCurrentInput.input.value) || 1;
+    const isPerInstallment = totalValueCheckbox?.checked || false;
     
     if (amount > 0 && installments >= 2 && current >= 1 && current <= installments) {
-      const installmentValue = amount / installments;
-      const lastInstallment = amount - (installmentValue * (installments - 1));
+      let installmentValue, lastInstallment, totalValue;
+      
+      if (isPerInstallment) {
+        // Checkbox MARCADO: Valor informado é por parcela (compra antiga)
+        // Cada parcela = valor digitado, não divide
+        installmentValue = amount;
+        lastInstallment = amount;
+        totalValue = amount * installments;
+      } else {
+        // Checkbox DESMARCADO (padrão): Valor total que será dividido
+        installmentValue = amount / installments;
+        lastInstallment = amount - (installmentValue * (installments - 1));
+        totalValue = amount;
+      }
+      
       const remaining = installments - current + 1;
       
       installmentPreview.innerHTML = `
         <strong>Parcela ${current}/${installments}</strong> • Valor: <strong>${formatCurrency(installmentValue)}</strong><br>
-        <small>Serão criadas ${remaining} parcela(s) de ${formatCurrency(installmentValue)} cada</small>
+        <small>${!isPerInstallment ? 'Total da compra: ' + formatCurrency(totalValue) + ' • ' : ''}Serão criadas ${remaining} parcela(s) de ${formatCurrency(installmentValue)} cada</small>
         ${Math.abs(lastInstallment - installmentValue) > 0.01 ? 
           `<br><small>Última parcela: ${formatCurrency(lastInstallment)}</small>` : ''}
       `;
@@ -866,6 +909,7 @@ function createTransactionModal() {
   });
   installmentInput.input.addEventListener("input", updateInstallmentPreview);
   installmentCurrentInput.input.addEventListener("input", updateInstallmentPreview);
+  totalValueCheckbox.addEventListener("change", updateInstallmentPreview);
   financingTotalInput.input.addEventListener("input", updateFinancingPreview);
   financingCurrentInput.input.addEventListener("input", updateFinancingPreview);
 
@@ -928,10 +972,27 @@ function createTransactionModal() {
       return;
     }
     
+    // Ajustar valor para parcelamento conforme checkbox
+    const originalAmount = parseFloat(amountField.input.value) || 0;
+    let finalAmount = originalAmount;
+    
+    // Se for parcelado, verificar o tipo de valor
+    if (installments > 0) {
+      const isPerInstallment = totalValueCheckbox?.checked || false;
+      
+      if (isPerInstallment) {
+        // Checkbox MARCADO: valor digitado é por parcela
+        // Multiplicar pelo total de parcelas para que quando o sistema dividir,
+        // cada parcela fique com o valor original
+        finalAmount = originalAmount * installments;
+      }
+      // Se checkbox DESMARCADO (padrão): valor já é o total, não precisa ajustar
+    }
+    
     const payload = buildTransactionPayload({
       date: dateField.input,
       description: descriptionField.input,
-      amount: amountField.input,
+      amount: { value: finalAmount.toString() },
       kind: kindField.select,
       categoryId: categoryField.select,
       cardId: cardField.select,
@@ -952,24 +1013,32 @@ function createTransactionModal() {
         payload.categoryId = suggestCategory(payload);
       }
       
-      // Se for parcelado, adicionar notação de parcela à descrição
-      if (installments > 1 && payload.cardId && payload.kind === "expense") {
-        // O sistema detecta automaticamente a notação "X/Y" na descrição
-        payload.description = `${payload.description} ${installmentCurrent}/${installments}`;
+      // IMPORTANTE: Ao editar transação, NÃO criar novas parcelas/financiamentos/recorrências
+      // Apenas atualizar a transação individual
+      const isEditing = transactionModal?.txId;
+      
+      if (!isEditing) {
+        // Apenas para NOVAS transações: adicionar notações de agrupamento
+        
+        // Se for parcelado, adicionar notação de parcela à descrição
+        if (installments > 1 && payload.cardId && payload.kind === "expense") {
+          // O sistema detecta automaticamente a notação "X/Y" na descrição
+          payload.description = `${payload.description} ${installmentCurrent}/${installments}`;
+        }
+        
+        // Se for financiamento, adicionar notação
+        if (isFinancing && payload.kind === "expense") {
+          payload.description = `${payload.description} [FIN:${financingCurrent}/${financingTotal}]`;
+        }
+        
+        // Se for recorrente, marcar na descrição para criar 12 meses
+        if (isRecurrent) {
+          payload.description = `${payload.description} [REC]`;
+        }
       }
       
-      // Se for financiamento, adicionar notação
-      if (isFinancing && payload.kind === "expense") {
-        payload.description = `${payload.description} [FIN:${financingCurrent}/${financingTotal}]`;
-      }
-      
-      // Se for recorrente, marcar na descrição para criar 12 meses
-      if (isRecurrent) {
-        payload.description = `${payload.description} [REC]`;
-      }
-      
-      // Criar transação (o sistema criará as parcelas/recorrências automaticamente)
-      if (transactionModal?.txId) {
+      // Criar ou atualizar transação
+      if (isEditing) {
         await transactionRepository.updateTransaction(
           transactionModal.txId,
           payload
@@ -1182,7 +1251,7 @@ function showFinancingDeleteModal(tx) {
   document.body.appendChild(overlay);
 }
 
-async function openTransactionModal(tx = null) {
+async function openTransactionModal(tx = null, options = {}) {
   if (!transactionModal) {
     transactionModal = createTransactionModal();
   }
@@ -1224,11 +1293,11 @@ async function openTransactionModal(tx = null) {
     const closingDay = Number(card.closingDay);
     
     // Se a transação é antes do dia de fechamento, fatura do mês atual
-    // Se é depois, fatura do próximo mês
+    // Se é no dia ou depois do fechamento, fatura do próximo mês
     let invoiceMonth = txDate.getMonth();
     let invoiceYear = txDate.getFullYear();
     
-    if (txDay > closingDay) {
+    if (txDay >= closingDay) {
       invoiceMonth += 1;
       if (invoiceMonth > 11) {
         invoiceMonth = 0;
@@ -1246,8 +1315,8 @@ async function openTransactionModal(tx = null) {
   modal.fields.amount.value = tx?.amount ?? "";
   modal.fields.kind.value = tx?.kind || "expense";
   modal.fields.categoryId.value = tx?.categoryId || "";
-  modal.fields.cardId.value = tx?.cardId || "";
-  modal.fields.invoiceMonthKey.value = tx?.invoiceMonthKey || "";
+  modal.fields.cardId.value = tx?.cardId || options.defaultCard || "";
+  modal.fields.invoiceMonthKey.value = tx?.invoiceMonthKey || options.defaultInvoiceMonth || "";
   modal.feedback.textContent = "";
   
   // Atualizar visibilidade dos campos condicionais baseado nos valores
@@ -1278,8 +1347,16 @@ async function openTransactionModal(tx = null) {
   // Executar ao abrir modal
   updateConditionalFields();
   
+  // Verificar se a transação faz parte de um grupo (parcela, financiamento ou recorrência)
+  const isPartOfGroup = tx && (tx.installment || tx.financing || tx.recurrence);
+  
   // Limpar checkboxes e campos extras quando for nova transação
+  // OU desabilitar se for edição de transação agrupada
   if (!tx) {
+    // Remover avisos anteriores se existirem
+    const oldWarning = modal.form.querySelector(".grouped-transaction-warning");
+    if (oldWarning) oldWarning.remove();
+    
     const creditCheckbox = document.getElementById("credit-checkbox");
     const installmentCheckbox = document.getElementById("installment-checkbox");
     const financingCheckbox = document.getElementById("financing-checkbox");
@@ -1294,19 +1371,23 @@ async function openTransactionModal(tx = null) {
     const creditInputWrapper = document.querySelector(".credit-input-wrapper");
     const installmentInputWrapper = document.querySelector(".installment-input-wrapper");
     const financingInputWrapper = document.querySelector(".financing-input-wrapper");
+    const totalValueLabel = document.getElementById("total-value-checkbox")?.parentElement;
     
     if (creditInputWrapper) creditInputWrapper.classList.add("hidden");
     if (installmentInputWrapper) installmentInputWrapper.classList.add("hidden");
     if (financingInputWrapper) financingInputWrapper.classList.add("hidden");
+    if (totalValueLabel) totalValueLabel.classList.add("hidden");
     
     // Limpar valores dos campos extras
     const installmentInput = document.querySelector("input[name='installments']");
     const financingTotalInput = document.querySelector("input[name='financingTotal']");
     const financingCurrentInput = document.querySelector("input[name='financingCurrent']");
+    const totalValueCheckbox = document.getElementById("total-value-checkbox");
     
     if (installmentInput) installmentInput.value = "";
     if (financingTotalInput) financingTotalInput.value = "";
     if (financingCurrentInput) financingCurrentInput.value = "1";
+    if (totalValueCheckbox) totalValueCheckbox.checked = false;
     
     // Limpar previews
     const installmentPreview = document.querySelector(".installment-preview");
@@ -1314,6 +1395,63 @@ async function openTransactionModal(tx = null) {
     
     if (installmentPreview) installmentPreview.textContent = "";
     if (financingPreview) financingPreview.textContent = "";
+  } else if (isPartOfGroup) {
+    // Se está editando uma transação agrupada, desabilitar opções de agrupamento
+    const creditCheckbox = document.getElementById("credit-checkbox");
+    const installmentCheckbox = document.getElementById("installment-checkbox");
+    const financingCheckbox = document.getElementById("financing-checkbox");
+    const recurrenceCheckbox = document.getElementById("recurrence-checkbox");
+    
+    // Desabilitar checkboxes para evitar criação de novos grupos
+    if (creditCheckbox) {
+      creditCheckbox.disabled = true;
+      creditCheckbox.checked = false;
+    }
+    if (installmentCheckbox) {
+      installmentCheckbox.disabled = true;
+      installmentCheckbox.checked = false;
+    }
+    if (financingCheckbox) {
+      financingCheckbox.disabled = true;
+      financingCheckbox.checked = false;
+    }
+    if (recurrenceCheckbox) {
+      recurrenceCheckbox.disabled = true;
+      recurrenceCheckbox.checked = false;
+    }
+    
+    // Adicionar aviso ao usuário
+    const warningMsg = document.createElement("div");
+    warningMsg.className = "grouped-transaction-warning"; // Classe para identificar e remover depois
+    warningMsg.style.padding = "0.75rem";
+    warningMsg.style.background = "#fef3c7";
+    warningMsg.style.border = "1px solid #f59e0b";
+    warningMsg.style.borderRadius = "var(--radius-sm)";
+    warningMsg.style.marginBottom = "1rem";
+    warningMsg.style.fontSize = "0.875rem";
+    warningMsg.style.color = "#92400e";
+    warningMsg.innerHTML = `
+      <strong>⚠️ Transação Agrupada</strong><br>
+      Esta transação faz parte de um ${tx.installment ? 'parcelamento' : tx.financing ? 'financiamento' : 'grupo recorrente'}.<br>
+      Você pode editar apenas campos básicos. Para alterar valores ou parcelas, delete e recadastre.
+    `;
+    
+    // Remover avisos anteriores se existirem
+    const oldWarning = modal.form.querySelector(".grouped-transaction-warning");
+    if (oldWarning) oldWarning.remove();
+    
+    modal.form.insertBefore(warningMsg, modal.form.firstChild);
+  } else {
+    // Edição de transação simples - habilitar todos os checkboxes
+    const creditCheckbox = document.getElementById("credit-checkbox");
+    const installmentCheckbox = document.getElementById("installment-checkbox");
+    const financingCheckbox = document.getElementById("financing-checkbox");
+    const recurrenceCheckbox = document.getElementById("recurrence-checkbox");
+    
+    if (creditCheckbox) creditCheckbox.disabled = false;
+    if (installmentCheckbox) installmentCheckbox.disabled = false;
+    if (financingCheckbox) financingCheckbox.disabled = false;
+    if (recurrenceCheckbox) recurrenceCheckbox.disabled = false;
   }
 
   // Ocultar FAB temporariamente
@@ -2625,6 +2763,18 @@ async function renderInvoices() {
       });
       buttonContainer.append(unpayButton);
     }
+
+    // Botão de nova transação
+    const newTransactionButton = createButton("Nova Transação", {
+      variant: "secondary",
+      onClick: () => {
+        openTransactionModal(null, {
+          defaultCard: cardId,
+          defaultInvoiceMonth: selectedMonth
+        });
+      },
+    });
+    buttonContainer.append(newTransactionButton);
 
     invoiceSummary.append(summaryTitle, totalLine, statusLine, buttonContainer);
 
