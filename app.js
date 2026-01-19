@@ -92,6 +92,10 @@ const merchantRulesState = {
 
 const monthStorageKey = "pvault2-month";
 
+// Controle de concorrência para renderização
+let renderCounter = 0;
+let isRendering = false;
+
 const monthToolbar = document.getElementById("month-toolbar");
 const topTabs = document.getElementById("top-tabs");
 const appView = document.getElementById("app-view");
@@ -367,7 +371,7 @@ function getRoute() {
   return window.location.hash || "#/app/dashboard";
 }
 
-function setMonth(monthKey) {
+async function setMonth(monthKey) {
   monthState.current = monthKey;
   sessionStorage.setItem(monthStorageKey, monthKey);
 
@@ -375,7 +379,7 @@ function setMonth(monthKey) {
   url.searchParams.set("m", monthKey);
   history.replaceState(null, "", url.pathname + url.search + url.hash);
   renderMonthToolbar();
-  renderRoute();
+  await renderRoute();
 }
 
 function shiftMonth(delta) {
@@ -1403,6 +1407,10 @@ function closeCardModal() {
 }
 
 function buildTransactionPayload(fields) {
+  // Calcular o monthKey baseado na data da transação, não no mês visualizado
+  const transactionDate = new Date(fields.date.value + 'T12:00:00');
+  const monthKey = `${transactionDate.getFullYear()}-${String(transactionDate.getMonth() + 1).padStart(2, '0')}`;
+  
   const payload = {
     date: fields.date.value,
     description: fields.description.value.trim(),
@@ -1411,7 +1419,7 @@ function buildTransactionPayload(fields) {
     categoryId: fields.categoryId.value || undefined,
     cardId: fields.cardId.value.trim() || undefined,
     invoiceMonthKey: fields.invoiceMonthKey.value || undefined,
-    monthKey: monthState.current,
+    monthKey: monthKey,
   };
   return payload;
 }
@@ -1908,36 +1916,55 @@ async function renderTransactionList(title, items, options = {}) {
     const actions = document.createElement("div");
     actions.className = "transaction-actions-hidden";
 
-    const editBtn = document.createElement("button");
-    editBtn.className = "icon-button";
-    editBtn.appendChild(createFluentIcon(FluentIcons.Edit));
-    editBtn.setAttribute("aria-label", "Editar");
-    editBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openTransactionModal(tx);
-    });
+    // Não permitir edição/exclusão de transações virtuais (resumo de fatura)
+    if (!tx._isVirtual) {
+      const editBtn = document.createElement("button");
+      editBtn.className = "icon-button";
+      editBtn.appendChild(createFluentIcon(FluentIcons.Edit));
+      editBtn.setAttribute("aria-label", "Editar");
+      editBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openTransactionModal(tx);
+      });
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.className = "icon-button danger";
-    deleteBtn.appendChild(createFluentIcon(FluentIcons.Delete));
-    deleteBtn.setAttribute("aria-label", "Excluir");
-    deleteBtn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      
-      // Se for parcela ou recorrência, mostrar opções
-      if (tx.installment && tx.installment.groupId) {
-        showInstallmentDeleteModal(tx);
-      } else if (tx.recurrence && tx.recurrence.groupId) {
-        showRecurrenceDeleteModal(tx);
-      } else {
-        if (confirm(`Excluir "${tx.description}"?`)) {
-          await transactionRepository.deleteTransaction(tx.id);
-          await renderRoute();
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "icon-button danger";
+      deleteBtn.appendChild(createFluentIcon(FluentIcons.Delete));
+      deleteBtn.setAttribute("aria-label", "Excluir");
+      deleteBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        
+        // Se for parcela ou recorrência, mostrar opções
+        if (tx.installment && tx.installment.groupId) {
+          showInstallmentDeleteModal(tx);
+        } else if (tx.recurrence && tx.recurrence.groupId) {
+          showRecurrenceDeleteModal(tx);
+        } else {
+          if (confirm(`Excluir "${tx.description}"?`)) {
+            await transactionRepository.deleteTransaction(tx.id);
+            await renderRoute();
+          }
         }
-      }
-    });
+      });
 
-    actions.append(editBtn, deleteBtn);
+      actions.append(editBtn, deleteBtn);
+    } else {
+      // Para transações virtuais (resumo de fatura), adicionar ícone de informação
+      const infoBtn = document.createElement("button");
+      infoBtn.className = "icon-button";
+      infoBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+        <path d="M10 2C5.58 2 2 5.58 2 10C2 14.42 5.58 18 10 18C14.42 18 18 14.42 18 10C18 5.58 14.42 2 10 2ZM11 15H9V13H11V15ZM11 11H9V5H11V11Z"/>
+      </svg>`;
+      infoBtn.setAttribute("aria-label", "Resumo da fatura");
+      infoBtn.title = "Este é um resumo da fatura. Para ver os detalhes, acesse a página de Faturas.";
+      infoBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        navigateTo(`#/app/invoices?cardId=${tx.cardId}&m=${tx.invoiceMonthKey}`);
+      });
+      
+      actions.append(infoBtn);
+    }
+    
     row.append(content, actions);
 
     // Swipe gesture
@@ -3066,16 +3093,31 @@ async function renderImport() {
 }
 
 async function renderRoute() {
-  const routeKey = normalizeRoute(getRoute());
-
-  if (routeKey === "#/login") {
-    if (authState.ready && authState.user) {
-      navigateTo("#/app/dashboard");
+  // Incrementar contador e armazenar localmente
+  const currentRender = ++renderCounter;
+  
+  // Se já estiver renderizando, aguardar um pouco e verificar novamente
+  if (isRendering) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+    // Se não somos a renderização mais recente, cancelar
+    if (currentRender !== renderCounter) {
       return;
     }
-    renderLogin();
-    return;
   }
+  
+  isRendering = true;
+  
+  try {
+    const routeKey = normalizeRoute(getRoute());
+
+    if (routeKey === "#/login") {
+      if (authState.ready && authState.user) {
+        navigateTo("#/app/dashboard");
+        return;
+      }
+      renderLogin();
+      return;
+    }
   
   // Restaurar top-bar e month-toolbar quando não estiver no login
   const topBar = document.querySelector('.top-bar');
@@ -3134,6 +3176,11 @@ async function renderRoute() {
     appView.append(info);
   }
 
+  // Verificar novamente se somos a renderização mais recente antes de finalizar
+  if (currentRender !== renderCounter) {
+    return;
+  }
+
   // Controlar FAB (mobile) para transações em rotas relevantes
   const fabButton = document.getElementById("fab-new-transaction");
   if (fabButton) {
@@ -3145,6 +3192,9 @@ async function renderRoute() {
   }
 
   updateActiveTab();
+  } finally {
+    isRendering = false;
+  }
 }
 
 function normalizeRoute(hash) {
@@ -3536,12 +3586,34 @@ function createTransactionRepository(cardRepo) {
         const offset = index - recurrence.current;
         const monthForRecurrence = addMonths(monthKey, offset);
         
+        // Calcular a data correta para a recorrência
+        // Manter o mesmo dia, mas mudar o mês
+        const recurrenceDate = (() => {
+          const originalDate = new Date(withSuggestion.date);
+          const day = originalDate.getDate();
+          const newDate = new Date(originalDate);
+          newDate.setMonth(originalDate.getMonth() + offset);
+          
+          // Se o dia não existe no novo mês (ex: 31 em fevereiro), 
+          // ajustar para o último dia do mês
+          if (newDate.getDate() !== day) {
+            newDate.setDate(0); // Volta para o último dia do mês anterior
+          }
+          
+          return newDate.toISOString().split('T')[0];
+        })();
+        
         const txRef = push(ref(db, `/users/${uid}/tx`));
         const txId = txRef.key;
+        
+        // Criar payload base removendo campos específicos de cartão
+        const { cardId, invoiceMonthKey, ...basePayload } = withSuggestion;
+        
         const payload = stripUndefined({
-          ...withSuggestion,
+          ...basePayload,
           description: cleanDescription,
           id: txId,
+          date: recurrenceDate,
           amount: amountCents / 100,
           monthKey: monthForRecurrence,
           isProjected: offset > 0,
@@ -3816,7 +3888,71 @@ function createTransactionRepository(cardRepo) {
         return txSnap.exists() ? txSnap.val() : null;
       })
     );
-    return results.filter(Boolean);
+    const allTransactions = results.filter(Boolean);
+    
+    // Filtrar transações de cartão de crédito que não sejam do mês atual
+    // (elas aparecem apenas como resumo da fatura no mês de vencimento)
+    const transactions = allTransactions.filter(tx => {
+      // Se não tem cartão, incluir sempre
+      if (!tx.cardId || !tx.invoiceMonthKey) {
+        return true;
+      }
+      
+      // Se tem cartão mas a fatura é do mês atual, incluir
+      // (transações do cartão aparecem no mês da fatura como resumo)
+      return tx.invoiceMonthKey === monthKey;
+    });
+    
+    // Adicionar transações virtuais de resumo de faturas
+    // Buscar todas as faturas do mês que tenham transações
+    const cards = await cardRepo.listCards();
+    const invoiceSummaries = [];
+    
+    for (const card of cards) {
+      // Verificar se há transações no cartão para este mês de fatura
+      const invoiceTransactions = await listInvoiceTransactions(card.id, monthKey);
+      
+      if (invoiceTransactions.length > 0) {
+        // Calcular o total da fatura
+        const totalCents = invoiceTransactions.reduce((sum, tx) => {
+          return sum + Math.round((Number(tx.amount) || 0) * 100);
+        }, 0);
+        
+        // Buscar a data de vencimento (dia de vencimento do cartão)
+        const dueDay = card.dueDay || 15; // Padrão: dia 15
+        const [year, month] = monthKey.split('-').map(Number);
+        const dueDate = new Date(year, month - 1, dueDay);
+        
+        // Ajustar se o dia não existe no mês
+        if (dueDate.getMonth() !== month - 1) {
+          dueDate.setDate(0); // Último dia do mês anterior (que é o mês correto)
+        }
+        
+        const dueDateStr = dueDate.toISOString().split('T')[0];
+        
+        // Criar transação virtual de resumo da fatura
+        const invoiceSummary = {
+          id: `invoice-summary-${card.id}-${monthKey}`,
+          description: `Fatura - ${card.name}`,
+          amount: totalCents / 100,
+          kind: 'expense',
+          categoryId: 'utilities', // Categoria "Contas"
+          date: dueDateStr,
+          monthKey: monthKey,
+          cardId: card.id,
+          invoiceMonthKey: monthKey,
+          isInvoiceSummary: true, // Flag para identificar que é um resumo
+          _isVirtual: true, // Não deve ser editável/deletável diretamente
+        };
+        
+        invoiceSummaries.push(invoiceSummary);
+      }
+    }
+    
+    // Combinar transações reais com resumos de faturas
+    // mas removendo as transações individuais do cartão que já estão no resumo
+    const nonCardTransactions = transactions.filter(tx => !tx.cardId || !tx.invoiceMonthKey);
+    return [...nonCardTransactions, ...invoiceSummaries];
   }
 
   async function listInvoiceTransactions(cardId, invoiceMonthKey) {
