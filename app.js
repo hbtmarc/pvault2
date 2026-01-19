@@ -2290,12 +2290,24 @@ async function renderTransactionList(title, items, options = {}) {
 
     const amount = document.createElement("div");
     amount.className = "transaction-amount";
-    if (tx.kind === "income") {
+    
+    // Se for uma receita (income) em uma fatura de cartão, é um adiantamento
+    // Mostrar como valor positivo em verde
+    const isInvoiceAdvance = tx.kind === "income" && tx.cardId && tx.invoiceMonthKey;
+    
+    if (isInvoiceAdvance) {
       amount.classList.add("income");
+      // Inverter o sinal: receita já é negativa no cálculo, mas exibir como positiva
+      amount.textContent = formatCurrency(Math.abs(tx.amount));
+    } else if (tx.kind === "income") {
+      amount.classList.add("income");
+      amount.textContent = formatCurrency(tx.amount);
     } else if (tx.kind === "expense") {
       amount.classList.add("expense");
+      amount.textContent = formatCurrency(tx.amount);
+    } else {
+      amount.textContent = formatCurrency(tx.amount);
     }
-    amount.textContent = formatCurrency(tx.amount);
 
     content.append(main, amount);
 
