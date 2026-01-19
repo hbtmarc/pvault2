@@ -590,10 +590,16 @@ function createTransactionModal() {
   installmentInput.input.placeholder = "Ex: 12";
   installmentInput.input.required = false;
   
+  const installmentCurrentInput = createInput("Parcela inicial", "number", "installmentCurrent");
+  installmentCurrentInput.input.min = "1";
+  installmentCurrentInput.input.value = "1";
+  installmentCurrentInput.input.placeholder = "Ex: 1";
+  installmentCurrentInput.input.required = false;
+  
   const installmentPreview = document.createElement("div");
   installmentPreview.className = "installment-preview";
   
-  installmentInputWrapper.append(installmentInput.wrapper, installmentPreview);
+  installmentInputWrapper.append(installmentInput.wrapper, installmentCurrentInput.wrapper, installmentPreview);
   installmentWrapper.append(installmentLabel, installmentInputWrapper);
   
   // Montar wrapper de crédito
@@ -664,6 +670,7 @@ function createTransactionModal() {
       installmentCheckbox.checked = false;
       installmentInputWrapper.classList.add("hidden");
       installmentInput.input.value = "";
+      installmentCurrentInput.input.value = "1";
       installmentPreview.textContent = "";
     } else {
       // Se crédito for marcado, desmarcar financiamento e recorrência
@@ -681,6 +688,7 @@ function createTransactionModal() {
     installmentInputWrapper.classList.toggle("hidden", !installmentCheckbox.checked);
     if (!installmentCheckbox.checked) {
       installmentInput.input.value = "";
+      installmentCurrentInput.input.value = "1";
       installmentPreview.textContent = "";
     }
   });
@@ -698,6 +706,7 @@ function createTransactionModal() {
       installmentCheckbox.checked = false;
       installmentInputWrapper.classList.add("hidden");
       installmentInput.input.value = "";
+      installmentCurrentInput.input.value = "1";
       installmentPreview.textContent = "";
       financingTotalInput.input.value = "";
       financingCurrentInput.input.value = "1";
@@ -723,6 +732,7 @@ function createTransactionModal() {
       installmentCheckbox.checked = false;
       installmentInputWrapper.classList.add("hidden");
       installmentInput.input.value = "";
+      installmentCurrentInput.input.value = "1";
       installmentPreview.textContent = "";
     }
   });
@@ -741,6 +751,7 @@ function createTransactionModal() {
       installmentCheckbox.checked = false;
       installmentInputWrapper.classList.add("hidden");
       installmentInput.input.value = "";
+      installmentCurrentInput.input.value = "1";
       installmentPreview.textContent = "";
     }
   };
@@ -767,13 +778,16 @@ function createTransactionModal() {
   const updateInstallmentPreview = () => {
     const amount = parseFloat(amountField.input.value) || 0;
     const installments = parseInt(installmentInput.input.value) || 0;
+    const current = parseInt(installmentCurrentInput.input.value) || 1;
     
-    if (amount > 0 && installments >= 2) {
+    if (amount > 0 && installments >= 2 && current >= 1 && current <= installments) {
       const installmentValue = amount / installments;
       const lastInstallment = amount - (installmentValue * (installments - 1));
+      const remaining = installments - current + 1;
       
       installmentPreview.innerHTML = `
-        <strong>${installments}x</strong> de <strong>${formatCurrency(installmentValue)}</strong>
+        <strong>Parcela ${current}/${installments}</strong> • Valor: <strong>${formatCurrency(installmentValue)}</strong><br>
+        <small>Serão criadas ${remaining} parcela(s) de ${formatCurrency(installmentValue)} cada</small>
         ${Math.abs(lastInstallment - installmentValue) > 0.01 ? 
           `<br><small>Última parcela: ${formatCurrency(lastInstallment)}</small>` : ''}
       `;
@@ -803,6 +817,7 @@ function createTransactionModal() {
     updateFinancingPreview();
   });
   installmentInput.input.addEventListener("input", updateInstallmentPreview);
+  installmentCurrentInput.input.addEventListener("input", updateInstallmentPreview);
   financingTotalInput.input.addEventListener("input", updateFinancingPreview);
   financingCurrentInput.input.addEventListener("input", updateFinancingPreview);
 
@@ -838,6 +853,7 @@ function createTransactionModal() {
     feedback.textContent = "";
     
     const installments = installmentCheckbox.checked ? parseInt(installmentInput.input.value) || 0 : 0;
+    const installmentCurrent = installmentCheckbox.checked ? parseInt(installmentCurrentInput.input.value) || 1 : 1;
     const isRecurrent = recurrenceCheckbox.checked;
     const isFinancing = financingCheckbox.checked;
     const financingTotal = isFinancing ? parseInt(financingTotalInput.input.value) || 0 : 0;
@@ -846,6 +862,11 @@ function createTransactionModal() {
     // Validações
     if (installments > 0 && (installments < 2 || installments > 36)) {
       feedback.textContent = "Número de parcelas deve ser entre 2 e 36.";
+      return;
+    }
+    
+    if (installments > 0 && (installmentCurrent < 1 || installmentCurrent > installments)) {
+      feedback.textContent = "Parcela inicial inválida.";
       return;
     }
     
@@ -885,8 +906,8 @@ function createTransactionModal() {
       
       // Se for parcelado, adicionar notação de parcela à descrição
       if (installments > 1 && payload.cardId && payload.kind === "expense") {
-        // O sistema detecta automaticamente a notação "1/12" na descrição
-        payload.description = `${payload.description} 1/${installments}`;
+        // O sistema detecta automaticamente a notação "X/Y" na descrição
+        payload.description = `${payload.description} ${installmentCurrent}/${installments}`;
       }
       
       // Se for financiamento, adicionar notação
