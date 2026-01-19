@@ -559,11 +559,48 @@ function createTransactionModal() {
   cardField.select.required = false;
   invoiceField.select.required = false;
   
+  // Função para calcular automaticamente o mês da fatura
+  const autoCalculateInvoiceMonth = async () => {
+    const selectedCardId = cardField.select.value.trim();
+    const selectedDate = dateField.input.value;
+    
+    if (!selectedCardId || !selectedDate) return;
+    
+    // Buscar os cartões disponíveis
+    const allCards = await cardRepository.listCards();
+    const card = allCards.find(c => c.id === selectedCardId);
+    
+    if (!card || !card.closingDay) return;
+    
+    // Calcular qual fatura baseado na data e dia de fechamento
+    const txDate = new Date(selectedDate + 'T12:00:00');
+    const txDay = txDate.getDate();
+    const closingDay = Number(card.closingDay);
+    
+    let invoiceMonth = txDate.getMonth();
+    let invoiceYear = txDate.getFullYear();
+    
+    // Se a compra foi DEPOIS do fechamento, vai para a fatura do próximo mês
+    if (txDay > closingDay) {
+      invoiceMonth += 1;
+      if (invoiceMonth > 11) {
+        invoiceMonth = 0;
+        invoiceYear += 1;
+      }
+    }
+    
+    const calculatedMonthKey = `${invoiceYear}-${String(invoiceMonth + 1).padStart(2, '0')}`;
+    
+    // Selecionar automaticamente o mês calculado
+    invoiceField.select.value = calculatedMonthKey;
+  };
+  
   // Lógica para mostrar/esconder campo de mês da fatura
   const toggleInvoiceField = () => {
     const hasCard = cardField.select.value.trim() !== "";
     if (hasCard) {
       invoiceField.wrapper.classList.remove("hidden");
+      autoCalculateInvoiceMonth(); // Calcular automaticamente ao selecionar cartão
     } else {
       invoiceField.wrapper.classList.add("hidden");
       invoiceField.select.value = "";
@@ -571,6 +608,13 @@ function createTransactionModal() {
   };
   
   cardField.select.addEventListener("change", toggleInvoiceField);
+  
+  // Recalcular fatura quando a data mudar (se já tiver cartão selecionado)
+  dateField.input.addEventListener("change", () => {
+    if (cardField.select.value.trim() !== "") {
+      autoCalculateInvoiceMonth();
+    }
+  });
   
   // Campo de parcelamento dentro do crédito
   const installmentWrapper = document.createElement("div");
@@ -1270,33 +1314,6 @@ async function openTransactionModal(tx = null) {
     
     if (installmentPreview) installmentPreview.textContent = "";
     if (financingPreview) financingPreview.textContent = "";
-  }
-  
-  // Atualizar automaticamente o mês da fatura quando o cartão ou data mudar
-  const updateInvoiceMonth = () => {
-    const selectedCard = modal.fields.cardId.value;
-    const selectedDate = modal.fields.date.value;
-    if (selectedCard && selectedDate) {
-      const calculatedMonth = calculateOpenInvoice(selectedCard, selectedDate);
-      if (calculatedMonth) {
-        modal.fields.invoiceMonthKey.value = calculatedMonth;
-      }
-    } else {
-      modal.fields.invoiceMonthKey.value = "";
-    }
-  };
-  
-  // Remover listeners antigos antes de adicionar novos (evitar duplicação)
-  modal.fields.cardId.removeEventListener('change', updateInvoiceMonth);
-  modal.fields.date.removeEventListener('change', updateInvoiceMonth);
-  
-  // Listeners para atualização automática
-  modal.fields.cardId.addEventListener('change', updateInvoiceMonth);
-  modal.fields.date.addEventListener('change', updateInvoiceMonth);
-  
-  // Se for nova transação e tiver cartão selecionado, calcular fatura automaticamente
-  if (!tx && modal.fields.cardId.value) {
-    updateInvoiceMonth();
   }
 
   // Ocultar FAB temporariamente
