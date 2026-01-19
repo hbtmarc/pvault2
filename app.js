@@ -671,8 +671,33 @@ function createTransactionModal() {
   installmentInputWrapper.append(installmentInput.wrapper, installmentCurrentInput.wrapper, installmentPreview);
   installmentWrapper.append(installmentLabel, installmentInputWrapper);
   
+  // Campo de assinatura dentro do crédito
+  const subscriptionWrapper = document.createElement("div");
+  subscriptionWrapper.className = "subscription-section";
+  
+  const subscriptionLabel = document.createElement("label");
+  subscriptionLabel.className = "checkbox";
+  const subscriptionCheckbox = document.createElement("input");
+  subscriptionCheckbox.type = "checkbox";
+  subscriptionCheckbox.id = "subscription-checkbox";
+  const subscriptionText = document.createElement("span");
+  subscriptionText.textContent = "Assinatura";
+  subscriptionLabel.append(subscriptionCheckbox, subscriptionText);
+  
+  const subscriptionPreview = document.createElement("div");
+  subscriptionPreview.className = "subscription-preview";
+  subscriptionPreview.style.fontSize = "0.8125rem";
+  subscriptionPreview.style.color = "var(--text-secondary)";
+  subscriptionPreview.style.marginTop = "0.5rem";
+  subscriptionPreview.style.padding = "0.5rem";
+  subscriptionPreview.style.background = "var(--surface)";
+  subscriptionPreview.style.borderRadius = "var(--radius-sm)";
+  subscriptionPreview.classList.add("hidden");
+  
+  subscriptionWrapper.append(subscriptionLabel, subscriptionPreview);
+  
   // Montar wrapper de crédito
-  creditInputWrapper.append(cardField.wrapper, invoiceField.wrapper, totalValueLabel, installmentWrapper);
+  creditInputWrapper.append(cardField.wrapper, invoiceField.wrapper, totalValueLabel, installmentWrapper, subscriptionWrapper);
   creditWrapper.append(creditLabel, creditInputWrapper);
   
   // Campo de financiamento (apenas para despesas)
@@ -743,6 +768,9 @@ function createTransactionModal() {
       installmentInput.input.value = "";
       installmentCurrentInput.input.value = "1";
       installmentPreview.textContent = "";
+      subscriptionCheckbox.checked = false;
+      subscriptionPreview.classList.add("hidden");
+      subscriptionPreview.textContent = "";
     } else {
       // Se crédito for marcado, desmarcar financiamento e recorrência
       financingCheckbox.checked = false;
@@ -765,6 +793,34 @@ function createTransactionModal() {
       installmentCurrentInput.input.value = "1";
       installmentPreview.textContent = "";
       totalValueCheckbox.checked = false; // Resetar ao desmarcar parcelamento
+    } else {
+      // Se parcelamento for marcado, desmarcar assinatura
+      subscriptionCheckbox.checked = false;
+      subscriptionPreview.classList.add("hidden");
+      subscriptionPreview.textContent = "";
+    }
+  });
+  
+  // Assinatura
+  subscriptionCheckbox.addEventListener("change", () => {
+    const isChecked = subscriptionCheckbox.checked;
+    
+    if (isChecked) {
+      // Se assinatura for marcada, desmarcar parcelamento
+      installmentCheckbox.checked = false;
+      installmentInputWrapper.classList.add("hidden");
+      totalValueLabel.classList.add("hidden");
+      installmentInput.input.value = "";
+      installmentCurrentInput.input.value = "1";
+      installmentPreview.textContent = "";
+      totalValueCheckbox.checked = false;
+      
+      // Mostrar preview
+      subscriptionPreview.classList.remove("hidden");
+      subscriptionPreview.textContent = "📅 Será criada automaticamente por 12 meses nas próximas faturas";
+    } else {
+      subscriptionPreview.classList.add("hidden");
+      subscriptionPreview.textContent = "";
     }
   });
   
@@ -947,6 +1003,7 @@ function createTransactionModal() {
     const installments = installmentCheckbox.checked ? parseInt(installmentInput.input.value) || 0 : 0;
     const installmentCurrent = installmentCheckbox.checked ? parseInt(installmentCurrentInput.input.value) || 1 : 1;
     const isRecurrent = recurrenceCheckbox.checked;
+    const isSubscription = subscriptionCheckbox.checked;
     const isFinancing = financingCheckbox.checked;
     const financingTotal = isFinancing ? parseInt(financingTotalInput.input.value) || 0 : 0;
     const financingCurrent = isFinancing ? parseInt(financingCurrentInput.input.value) || 1 : 1;
@@ -969,6 +1026,12 @@ function createTransactionModal() {
     
     if (isFinancing && (financingCurrent < 1 || financingCurrent > financingTotal)) {
       feedback.textContent = "Parcela inicial inválida.";
+      return;
+    }
+    
+    // Validar assinatura (requer cartão)
+    if (isSubscription && !cardField.select.value) {
+      feedback.textContent = "Assinatura requer um cartão de crédito.";
       return;
     }
     
@@ -1024,6 +1087,11 @@ function createTransactionModal() {
         if (installments > 1 && payload.cardId && payload.kind === "expense") {
           // O sistema detecta automaticamente a notação "X/Y" na descrição
           payload.description = `${payload.description} ${installmentCurrent}/${installments}`;
+        }
+        
+        // Se for assinatura, adicionar notação
+        if (isSubscription && payload.cardId && payload.kind === "expense") {
+          payload.description = `${payload.description} [SUB]`;
         }
         
         // Se for financiamento, adicionar notação
@@ -1176,6 +1244,64 @@ function showRecurrenceDeleteModal(tx) {
   });
 
   const cancelBtn = createButton("Cancelar", { variant: "secondary" });
+  cancelBtn.addEventListener("click", () => {
+    document.body.removeChild(overlay);
+  });
+
+  btnContainer.append(deleteCurrentBtn, deleteFutureBtn, cancelBtn);
+  modal.append(title, description, btnContainer);
+  overlay.appendChild(modal);
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      document.body.removeChild(overlay);
+    }
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function showSubscriptionDeleteModal(tx) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+
+  const modal = document.createElement("div");
+  modal.className = "modal";
+  modal.style.maxWidth = "400px";
+
+  const title = document.createElement("h2");
+  title.textContent = "Excluir assinatura";
+
+  const description = document.createElement("p");
+  description.style.marginBottom = "1.5rem";
+  description.style.color = "var(--text-secondary)";
+  description.textContent = `Esta é o mês ${tx.subscription.current}/${tx.subscription.total} da assinatura "${tx.description}". O que deseja fazer?`;
+
+  const btnContainer = document.createElement("div");
+  btnContainer.style.display = "flex";
+  btnContainer.style.gap = "0.75rem";
+  btnContainer.style.flexDirection = "column";
+
+  const deleteCurrentBtn = createButton("Excluir apenas este mês", { variant: "secondary" });
+  deleteCurrentBtn.addEventListener("click", async () => {
+    if (confirm(`Excluir apenas o mês ${tx.subscription.current}/${tx.subscription.total} desta assinatura?`)) {
+      await transactionRepository.deleteTransaction(tx.id);
+      document.body.removeChild(overlay);
+      await renderRoute();
+    }
+  });
+
+  const deleteFutureBtn = createButton("Cancelar assinatura (excluir este e futuros)", { variant: "danger" });
+  deleteFutureBtn.addEventListener("click", async () => {
+    const remaining = tx.subscription.total - tx.subscription.current + 1;
+    if (confirm(`Cancelar assinatura? Serão excluídos ${remaining} mês(es) (do ${tx.subscription.current} até o ${tx.subscription.total})`)) {
+      await transactionRepository.deleteFutureSubscriptions(tx);
+      document.body.removeChild(overlay);
+      await renderRoute();
+    }
+  });
+
+  const cancelBtn = createButton("Voltar", { variant: "secondary" });
   cancelBtn.addEventListener("click", () => {
     document.body.removeChild(overlay);
   });
@@ -1347,8 +1473,8 @@ async function openTransactionModal(tx = null, options = {}) {
   // Executar ao abrir modal
   updateConditionalFields();
   
-  // Verificar se a transação faz parte de um grupo (parcela, financiamento ou recorrência)
-  const isPartOfGroup = tx && (tx.installment || tx.financing || tx.recurrence);
+  // Verificar se a transação faz parte de um grupo (parcela, financiamento, assinatura ou recorrência)
+  const isPartOfGroup = tx && (tx.installment || tx.financing || tx.subscription || tx.recurrence);
   
   // Limpar checkboxes e campos extras quando for nova transação
   // OU desabilitar se for edição de transação agrupada
@@ -1359,11 +1485,13 @@ async function openTransactionModal(tx = null, options = {}) {
     
     const creditCheckbox = document.getElementById("credit-checkbox");
     const installmentCheckbox = document.getElementById("installment-checkbox");
+    const subscriptionCheckbox = document.getElementById("subscription-checkbox");
     const financingCheckbox = document.getElementById("financing-checkbox");
     const recurrenceCheckbox = document.getElementById("recurrence-checkbox");
     
     if (creditCheckbox) creditCheckbox.checked = false;
     if (installmentCheckbox) installmentCheckbox.checked = false;
+    if (subscriptionCheckbox) subscriptionCheckbox.checked = false;
     if (financingCheckbox) financingCheckbox.checked = false;
     if (recurrenceCheckbox) recurrenceCheckbox.checked = false;
     
@@ -1399,6 +1527,7 @@ async function openTransactionModal(tx = null, options = {}) {
     // Se está editando uma transação agrupada, desabilitar opções de agrupamento
     const creditCheckbox = document.getElementById("credit-checkbox");
     const installmentCheckbox = document.getElementById("installment-checkbox");
+    const subscriptionCheckbox = document.getElementById("subscription-checkbox");
     const financingCheckbox = document.getElementById("financing-checkbox");
     const recurrenceCheckbox = document.getElementById("recurrence-checkbox");
     
@@ -1410,6 +1539,10 @@ async function openTransactionModal(tx = null, options = {}) {
     if (installmentCheckbox) {
       installmentCheckbox.disabled = true;
       installmentCheckbox.checked = false;
+    }
+    if (subscriptionCheckbox) {
+      subscriptionCheckbox.disabled = true;
+      subscriptionCheckbox.checked = false;
     }
     if (financingCheckbox) {
       financingCheckbox.disabled = true;
@@ -1432,7 +1565,7 @@ async function openTransactionModal(tx = null, options = {}) {
     warningMsg.style.color = "#92400e";
     warningMsg.innerHTML = `
       <strong>⚠️ Transação Agrupada</strong><br>
-      Esta transação faz parte de um ${tx.installment ? 'parcelamento' : tx.financing ? 'financiamento' : 'grupo recorrente'}.<br>
+      Esta transação faz parte de um ${tx.installment ? 'parcelamento' : tx.financing ? 'financiamento' : tx.subscription ? 'assinatura' : 'grupo recorrente'}.<br>
       Você pode editar apenas campos básicos. Para alterar valores ou parcelas, delete e recadastre.
     `;
     
@@ -1445,11 +1578,13 @@ async function openTransactionModal(tx = null, options = {}) {
     // Edição de transação simples - habilitar todos os checkboxes
     const creditCheckbox = document.getElementById("credit-checkbox");
     const installmentCheckbox = document.getElementById("installment-checkbox");
+    const subscriptionCheckbox = document.getElementById("subscription-checkbox");
     const financingCheckbox = document.getElementById("financing-checkbox");
     const recurrenceCheckbox = document.getElementById("recurrence-checkbox");
     
     if (creditCheckbox) creditCheckbox.disabled = false;
     if (installmentCheckbox) installmentCheckbox.disabled = false;
+    if (subscriptionCheckbox) subscriptionCheckbox.disabled = false;
     if (financingCheckbox) financingCheckbox.disabled = false;
     if (recurrenceCheckbox) recurrenceCheckbox.disabled = false;
   }
@@ -1897,6 +2032,18 @@ function parseRecurrence(description) {
   return { current: 1, total: 12 };
 }
 
+function parseSubscription(description) {
+  if (!description) {
+    return null;
+  }
+  const match = description.match(/\[SUB\]/);
+  if (!match) {
+    return null;
+  }
+  // Retornar objeto indicando assinatura de 12 meses
+  return { current: 1, total: 12 };
+}
+
 function parseFinancing(description) {
   if (!description) {
     return null;
@@ -2119,6 +2266,22 @@ async function renderTransactionList(title, items, options = {}) {
       titleLine.appendChild(recurrenceBadge);
     }
     
+    // Indicador de assinatura
+    if (tx.subscription && tx.subscription.groupId) {
+      const subscriptionBadge = document.createElement("span");
+      subscriptionBadge.className = "subscription-badge";
+      subscriptionBadge.textContent = `📅 ${tx.subscription.current}/${tx.subscription.total}`;
+      subscriptionBadge.style.marginLeft = "0.5rem";
+      subscriptionBadge.style.fontSize = "0.75rem";
+      subscriptionBadge.style.fontWeight = "600";
+      subscriptionBadge.style.color = "#7c3aed";
+      subscriptionBadge.style.background = "#ede9fe";
+      subscriptionBadge.style.padding = "0.125rem 0.375rem";
+      subscriptionBadge.style.borderRadius = "var(--radius-sm)";
+      subscriptionBadge.title = "Assinatura";
+      titleLine.appendChild(subscriptionBadge);
+    }
+    
     const metaLine = document.createElement("div");
     metaLine.className = "transaction-meta";
     const cardName = tx.cardId ? cardMap.get(tx.cardId) || null : null;
@@ -2157,11 +2320,13 @@ async function renderTransactionList(title, items, options = {}) {
       deleteBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
         
-        // Se for parcela, financiamento ou recorrência, mostrar opções
+        // Se for parcela, financiamento, assinatura ou recorrência, mostrar opções
         if (tx.installment && tx.installment.groupId) {
           showInstallmentDeleteModal(tx);
         } else if (tx.financing && tx.financing.groupId) {
           showFinancingDeleteModal(tx);
+        } else if (tx.subscription && tx.subscription.groupId) {
+          showSubscriptionDeleteModal(tx);
         } else if (tx.recurrence && tx.recurrence.groupId) {
           showRecurrenceDeleteModal(tx);
         } else {
@@ -3781,6 +3946,7 @@ function createTransactionRepository(cardRepo) {
     }
     const installment = parseInstallment(withSuggestion.description);
     const recurrence = parseRecurrence(withSuggestion.description);
+    const subscription = parseSubscription(withSuggestion.description);
     const financing = parseFinancing(withSuggestion.description);
     const monthKey = withSuggestion.monthKey;
     const baseInvoiceMonth = withSuggestion.invoiceMonthKey || monthKey;
@@ -3861,6 +4027,82 @@ function createTransactionRepository(cardRepo) {
           },
         });
         Object.assign(updates, buildTransactionUpdates(uid, txId, payload));
+        if (payload.cardId && payload.invoiceMonthKey) {
+          recomputeTargets.add(`${payload.cardId}::${payload.invoiceMonthKey}`);
+        }
+      }
+
+      await update(ref(db), updates);
+      await Promise.all(
+        Array.from(recomputeTargets).map((key) => {
+          const [cardId, invoiceMonthKey] = key.split("::");
+          return cardRepo.recomputeInvoiceMeta(cardId, invoiceMonthKey);
+        })
+      );
+      return { ...withSuggestion };
+    }
+
+    // Processar assinatura (despesas com cartão de crédito - 12 meses)
+    if (subscription && subscription.current >= 1 && withSuggestion.cardId) {
+      const amountCents = Math.round((Number(withSuggestion.amount) || 0) * 100);
+      const groupId = hashString([
+        withSuggestion.description,
+        withSuggestion.date,
+        amountCents,
+        subscription.total,
+        withSuggestion.cardId,
+      ].join("|"));
+      
+      // Remover notação de assinatura da descrição
+      const cleanDescription = withSuggestion.description.replace(/\s*\[SUB\]\s*$/i, '').trim();
+      
+      const updates = {};
+      const recomputeTargets = new Set();
+
+      for (let index = subscription.current; index <= subscription.total; index += 1) {
+        const offset = index - subscription.current;
+        const monthForSubscription = addMonths(monthKey, offset);
+        
+        // Calcular a fatura correta (avança mês a mês)
+        const invoiceMonthKey = addMonths(baseInvoiceMonth, offset);
+        
+        // Calcular a data correta para a assinatura
+        // Manter o mesmo dia, mas mudar o mês
+        const subscriptionDate = (() => {
+          const originalDate = new Date(withSuggestion.date);
+          const day = originalDate.getDate();
+          const newDate = new Date(originalDate);
+          newDate.setMonth(originalDate.getMonth() + offset);
+          
+          // Se o dia não existe no novo mês (ex: 31 em fevereiro), 
+          // ajustar para o último dia do mês
+          if (newDate.getDate() !== day) {
+            newDate.setDate(0); // Volta para o último dia do mês anterior
+          }
+          
+          return newDate.toISOString().split('T')[0];
+        })();
+        
+        const txRef = push(ref(db, `/users/${uid}/tx`));
+        const txId = txRef.key;
+        
+        const payload = stripUndefined({
+          ...withSuggestion,
+          description: cleanDescription,
+          id: txId,
+          date: subscriptionDate,
+          amount: amountCents / 100,
+          monthKey: monthForSubscription,
+          invoiceMonthKey,
+          isProjected: offset > 0,
+          subscription: {
+            current: index,
+            total: subscription.total,
+            groupId,
+          },
+        });
+        Object.assign(updates, buildTransactionUpdates(uid, txId, payload));
+        
         if (payload.cardId && payload.invoiceMonthKey) {
           recomputeTargets.add(`${payload.cardId}::${payload.invoiceMonthKey}`);
         }
@@ -4206,6 +4448,52 @@ function createTransactionRepository(cardRepo) {
     await update(ref(db), updates);
   }
 
+  async function deleteFutureSubscriptions(tx) {
+    const uid = getUserId();
+    const groupId = tx.subscription?.groupId;
+    if (!groupId) return;
+
+    // Buscar todas as transações
+    const allTxRef = ref(db, `/users/${uid}/tx`);
+    const snapshot = await get(allTxRef);
+    if (!snapshot.exists()) return;
+
+    const allTransactions = snapshot.val();
+    const updates = {};
+    const recomputeTargets = new Set();
+
+    // Encontrar e deletar esta assinatura e todas as futuras do mesmo grupo
+    Object.entries(allTransactions).forEach(([id, transaction]) => {
+      if (
+        transaction.subscription?.groupId === groupId &&
+        transaction.subscription?.current >= tx.subscription.current
+      ) {
+        updates[`/users/${uid}/tx/${id}`] = null;
+        
+        if (transaction.monthKey) {
+          updates[`/users/${uid}/txByMonth/${transaction.monthKey}/${id}`] = null;
+        }
+        
+        if (transaction.cardId && transaction.invoiceMonthKey) {
+          updates[
+            `/users/${uid}/cardTxByInvoice/${transaction.cardId}/${transaction.invoiceMonthKey}/${id}`
+          ] = null;
+          recomputeTargets.add(`${transaction.cardId}::${transaction.invoiceMonthKey}`);
+        }
+      }
+    });
+
+    await update(ref(db), updates);
+    
+    // Recomputar faturas afetadas
+    await Promise.all(
+      Array.from(recomputeTargets).map((key) => {
+        const [cardId, invoiceMonthKey] = key.split("::");
+        return cardRepo.recomputeInvoiceMeta(cardId, invoiceMonthKey);
+      })
+    );
+  }
+
   async function deleteFutureFinancings(tx) {
     const uid = getUserId();
     const groupId = tx.financing?.groupId;
@@ -4359,6 +4647,7 @@ function createTransactionRepository(cardRepo) {
     deleteTransaction,
     deleteFutureInstallments,
     deleteFutureRecurrences,
+    deleteFutureSubscriptions,
     deleteFutureFinancings,
     listMonthTransactions,
     listInvoiceTransactions,
