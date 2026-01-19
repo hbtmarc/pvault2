@@ -1080,6 +1080,64 @@ function showRecurrenceDeleteModal(tx) {
   document.body.appendChild(overlay);
 }
 
+function showFinancingDeleteModal(tx) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+
+  const modal = document.createElement("div");
+  modal.className = "modal";
+  modal.style.maxWidth = "400px";
+
+  const title = document.createElement("h2");
+  title.textContent = "Excluir parcela de financiamento";
+
+  const description = document.createElement("p");
+  description.style.marginBottom = "1.5rem";
+  description.style.color = "var(--text-secondary)";
+  description.textContent = `Esta é a parcela ${tx.financing.current}/${tx.financing.total} de "${tx.description}". O que deseja fazer?`;
+
+  const btnContainer = document.createElement("div");
+  btnContainer.style.display = "flex";
+  btnContainer.style.gap = "0.75rem";
+  btnContainer.style.flexDirection = "column";
+
+  const deleteCurrentBtn = createButton("Excluir apenas esta parcela", { variant: "secondary" });
+  deleteCurrentBtn.addEventListener("click", async () => {
+    if (confirm(`Excluir apenas a parcela ${tx.financing.current}/${tx.financing.total}?`)) {
+      await transactionRepository.deleteTransaction(tx.id);
+      document.body.removeChild(overlay);
+      await renderRoute();
+    }
+  });
+
+  const deleteFutureBtn = createButton("Excluir esta e todas as futuras", { variant: "danger" });
+  deleteFutureBtn.addEventListener("click", async () => {
+    const remaining = tx.financing.total - tx.financing.current + 1;
+    if (confirm(`Excluir ${remaining} parcela(s) (da ${tx.financing.current} até a ${tx.financing.total})?`)) {
+      await transactionRepository.deleteFutureFinancings(tx);
+      document.body.removeChild(overlay);
+      await renderRoute();
+    }
+  });
+
+  const cancelBtn = createButton("Cancelar", { variant: "secondary" });
+  cancelBtn.addEventListener("click", () => {
+    document.body.removeChild(overlay);
+  });
+
+  btnContainer.append(deleteCurrentBtn, deleteFutureBtn, cancelBtn);
+  modal.append(title, description, btnContainer);
+  overlay.appendChild(modal);
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      document.body.removeChild(overlay);
+    }
+  });
+
+  document.body.appendChild(overlay);
+}
+
 async function openTransactionModal(tx = null) {
   if (!transactionModal) {
     transactionModal = createTransactionModal();
@@ -1506,6 +1564,16 @@ function parseAmount(value) {
 }
 
 function buildTxCandidate(raw, data) {
+  // Calcular o monthKey baseado na data da transação, não no mês visualizado
+  let monthKey;
+  if (data.date) {
+    const transactionDate = new Date(data.date + 'T12:00:00');
+    monthKey = `${transactionDate.getFullYear()}-${String(transactionDate.getMonth() + 1).padStart(2, '0')}`;
+  } else {
+    // Fallback para mês atual se não houver data
+    monthKey = monthState.current;
+  }
+  
   return stripUndefined({
     date: data.date,
     description: data.description,
@@ -1514,7 +1582,7 @@ function buildTxCandidate(raw, data) {
     categoryId: data.categoryId,
     cardId: data.cardId,
     invoiceMonthKey: data.invoiceMonthKey,
-    monthKey: monthState.current,
+    monthKey: monthKey,
     sourceRaw: raw,
   });
 }
@@ -1934,9 +2002,11 @@ async function renderTransactionList(title, items, options = {}) {
       deleteBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
         
-        // Se for parcela ou recorrência, mostrar opções
+        // Se for parcela, financiamento ou recorrência, mostrar opções
         if (tx.installment && tx.installment.groupId) {
           showInstallmentDeleteModal(tx);
+        } else if (tx.financing && tx.financing.groupId) {
+          showFinancingDeleteModal(tx);
         } else if (tx.recurrence && tx.recurrence.groupId) {
           showRecurrenceDeleteModal(tx);
         } else {
@@ -3350,38 +3420,89 @@ function createCardRepository() {
     const totalCents = getInvoiceTotalCents(invoiceItems);
     const uid = getUserId();
     const metaPath = `/users/${uid}/invoices/${cardId}/${monthKey}/meta`;
+    const invoicePath = `/users/${uid}/invoices/${cardId}/${monthKey}`;
     const current = await getInvoiceMeta(cardId, monthKey);
-    await update(ref(db), {
-      [metaPath]: stripUndefined({
-        ...current,
-        monthKey,
-        totalCents,
-        updatedAt: Date.now(),
-      }),
-    });
+    
+    // Se não há transações e a fatura não está paga, remover completamente
+    if (totalCents === 0 && !current.paid) {
+      await update(ref(db), {
+        [invoicePath]: null,
+      });
+    } else {
+      // Atualizar com os valores corretos
+      await update(ref(db), {
+        [metaPath]: stripUndefined({
+          ...current,
+          monthKey,
+          totalCents,
+          updatedAt: Date.now(),
+        }),
+      });
+    }
+    
     await recomputeCardUnpaidTotal(cardId);
   }
 
   async function recomputeCardUnpaidTotal(cardId) {
     const uid = getUserId();
-    const snapshot = await get(ref(db, `/users/${uid}/invoices/${cardId}`));
-    if (!snapshot.exists()) {
-      await update(ref(db), {
-        [`/users/${uid}/cards/${cardId}/unpaidTotalCents`]: 0,
-      });
+    
+    // Primeiro, vamos recomputar TODAS as faturas deste cartão para garantir consistência
+    const invoicesSnapshot = await get(ref(db, `/users/${uid}/invoices/${cardId}`));
+    const updates = {};
+    
+    if (!invoicesSnapshot.exists()) {
+      updates[`/users/${uid}/cards/${cardId}/unpaidTotalCents`] = 0;
+      await update(ref(db), updates);
       return 0;
     }
-    const invoices = snapshot.val();
+    
+    const invoices = invoicesSnapshot.val();
+    const monthKeys = Object.keys(invoices);
+    
+    // Recomputar cada fatura individualmente
+    await Promise.all(
+      monthKeys.map(async (monthKey) => {
+        const txList = await transactionRepository.listInvoiceTransactions(
+          cardId,
+          monthKey
+        );
+        const invoiceItems = txList.filter((tx) =>
+          ["expense", "income"].includes(tx.kind)
+        );
+        const totalCents = getInvoiceTotalCents(invoiceItems);
+        
+        const current = invoices[monthKey]?.meta || {};
+        const metaPath = `/users/${uid}/invoices/${cardId}/${monthKey}/meta`;
+        
+        // Se não há transações e não está paga, remover o meta completamente
+        if (totalCents === 0 && !current.paid) {
+          updates[`/users/${uid}/invoices/${cardId}/${monthKey}`] = null;
+        } else {
+          // Atualizar com os valores corretos
+          updates[metaPath] = stripUndefined({
+            ...current,
+            monthKey,
+            totalCents,
+            updatedAt: Date.now(),
+          });
+        }
+      })
+    );
+    
+    // Agora calcular o total em aberto baseado nos dados atualizados
     let total = 0;
-    Object.values(invoices).forEach((invoice) => {
-      const meta = invoice?.meta;
-      if (meta && !meta.paid) {
-        total += Number(meta.totalCents) || 0;
+    Object.entries(updates).forEach(([path, value]) => {
+      if (value && path.endsWith('/meta') && !value.paid) {
+        total += Number(value.totalCents) || 0;
       }
     });
-    await update(ref(db), {
-      [`/users/${uid}/cards/${cardId}/unpaidTotalCents`]: total,
-    });
+    
+    // Adicionar o unpaid total aos updates
+    updates[`/users/${uid}/cards/${cardId}/unpaidTotalCents`] = total;
+    
+    // Aplicar todas as mudanças de uma vez
+    await update(ref(db), updates);
+    
     return total;
   }
 
@@ -3528,10 +3649,32 @@ function createTransactionRepository(cardRepo) {
         
         // Calcular a data correta para a parcela do financiamento
         // Primeira parcela: data original
-        // Parcelas futuras: data de fechamento da fatura
-        const financingDate = cardInfo && cardInfo.closingDay
-          ? calculateClosingDate(withSuggestion.date, cardInfo.closingDay, offset)
-          : withSuggestion.date;
+        // Parcelas futuras: mesma data no mês correspondente (ou data de fechamento se tiver cartão)
+        const financingDate = (() => {
+          if (offset === 0) {
+            // Primeira parcela usa a data original
+            return withSuggestion.date;
+          }
+          
+          if (cardInfo && cardInfo.closingDay) {
+            // Se tem cartão, usar data de fechamento
+            return calculateClosingDate(withSuggestion.date, cardInfo.closingDay, offset);
+          }
+          
+          // Sem cartão: preservar o mesmo dia do mês, avançando os meses
+          const originalDate = new Date(withSuggestion.date);
+          const day = originalDate.getDate();
+          const newDate = new Date(originalDate);
+          newDate.setMonth(originalDate.getMonth() + offset);
+          
+          // Se o dia não existe no novo mês (ex: 31 em fevereiro), 
+          // ajustar para o último dia do mês
+          if (newDate.getDate() !== day) {
+            newDate.setDate(0); // Volta para o último dia do mês anterior
+          }
+          
+          return newDate.toISOString().split('T')[0];
+        })();
         
         const txRef = push(ref(db, `/users/${uid}/tx`));
         const txId = txRef.key;
@@ -3653,10 +3796,32 @@ function createTransactionRepository(cardRepo) {
         
         // Calcular a data correta para a parcela
         // Primeira parcela: data original da compra
-        // Parcelas futuras: data de fechamento da fatura
-        const installmentDate = cardInfo && cardInfo.closingDay
-          ? calculateClosingDate(withSuggestion.date, cardInfo.closingDay, offset)
-          : withSuggestion.date;
+        // Parcelas futuras: mesma data no mês correspondente (ou data de fechamento se tiver cartão)
+        const installmentDate = (() => {
+          if (offset === 0) {
+            // Primeira parcela usa a data original
+            return withSuggestion.date;
+          }
+          
+          if (cardInfo && cardInfo.closingDay) {
+            // Se tem cartão, usar data de fechamento
+            return calculateClosingDate(withSuggestion.date, cardInfo.closingDay, offset);
+          }
+          
+          // Sem cartão: preservar o mesmo dia do mês, avançando os meses
+          const originalDate = new Date(withSuggestion.date);
+          const day = originalDate.getDate();
+          const newDate = new Date(originalDate);
+          newDate.setMonth(originalDate.getMonth() + offset);
+          
+          // Se o dia não existe no novo mês (ex: 31 em fevereiro), 
+          // ajustar para o último dia do mês
+          if (newDate.getDate() !== day) {
+            newDate.setDate(0); // Volta para o último dia do mês anterior
+          }
+          
+          return newDate.toISOString().split('T')[0];
+        })();
         
         const installmentCents =
           perInstallment + (index - 1 < remainder ? 1 : 0);
@@ -3874,6 +4039,52 @@ function createTransactionRepository(cardRepo) {
     await update(ref(db), updates);
   }
 
+  async function deleteFutureFinancings(tx) {
+    const uid = getUserId();
+    const groupId = tx.financing?.groupId;
+    if (!groupId) return;
+
+    // Buscar todas as transações
+    const allTxRef = ref(db, `/users/${uid}/tx`);
+    const snapshot = await get(allTxRef);
+    if (!snapshot.exists()) return;
+
+    const allTransactions = snapshot.val();
+    const updates = {};
+    const recomputeTargets = new Set();
+
+    // Encontrar e deletar esta parcela de financiamento e todas as futuras do mesmo grupo
+    Object.entries(allTransactions).forEach(([id, transaction]) => {
+      if (
+        transaction.financing?.groupId === groupId &&
+        transaction.financing?.current >= tx.financing.current
+      ) {
+        updates[`/users/${uid}/tx/${id}`] = null;
+        
+        if (transaction.monthKey) {
+          updates[`/users/${uid}/txByMonth/${transaction.monthKey}/${id}`] = null;
+        }
+        
+        if (transaction.cardId && transaction.invoiceMonthKey) {
+          updates[
+            `/users/${uid}/cardTxByInvoice/${transaction.cardId}/${transaction.invoiceMonthKey}/${id}`
+          ] = null;
+          recomputeTargets.add(`${transaction.cardId}::${transaction.invoiceMonthKey}`);
+        }
+      }
+    });
+
+    await update(ref(db), updates);
+    
+    // Recomputar faturas afetadas
+    await Promise.all(
+      Array.from(recomputeTargets).map((key) => {
+        const [cardId, invoiceMonthKey] = key.split("::");
+        return cardRepo.recomputeInvoiceMeta(cardId, invoiceMonthKey);
+      })
+    );
+  }
+
   async function listMonthTransactions(monthKey) {
     const uid = getUserId();
     const listRef = ref(db, `/users/${uid}/txByMonth/${monthKey}`);
@@ -3981,6 +4192,7 @@ function createTransactionRepository(cardRepo) {
     deleteTransaction,
     deleteFutureInstallments,
     deleteFutureRecurrences,
+    deleteFutureFinancings,
     listMonthTransactions,
     listInvoiceTransactions,
   };
