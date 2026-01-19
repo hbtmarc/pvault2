@@ -3374,6 +3374,32 @@ function createCardRepository() {
 }
 
 function createTransactionRepository(cardRepo) {
+  // Função para calcular a data de fechamento da fatura para parcelas futuras
+  function calculateClosingDate(originalDate, closingDay, monthsOffset) {
+    if (!closingDay || monthsOffset === 0) {
+      return originalDate; // Primeira parcela mantém a data original
+    }
+    
+    const date = new Date(originalDate);
+    date.setMonth(date.getMonth() + monthsOffset);
+    
+    // Ajustar para o dia de fechamento do cartão
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    
+    // Criar data com o dia de fechamento
+    const closingDate = new Date(year, month, closingDay);
+    
+    // Se o dia de fechamento não existe no mês (ex: 31 em fevereiro),
+    // ajustar para o último dia do mês
+    if (closingDate.getMonth() !== month) {
+      closingDate.setDate(0); // Volta para o último dia do mês anterior (que é o mês correto)
+    }
+    
+    // Retornar no formato YYYY-MM-DD
+    return closingDate.toISOString().split('T')[0];
+  }
+  
   function buildInstallmentGroupId(payload, installment) {
     const merchantKey = getMerchantKey(payload.description || "");
     const base = [
@@ -3420,6 +3446,12 @@ function createTransactionRepository(cardRepo) {
     const financing = parseFinancing(withSuggestion.description);
     const monthKey = withSuggestion.monthKey;
     const baseInvoiceMonth = withSuggestion.invoiceMonthKey || monthKey;
+    
+    // Buscar informações do cartão se houver cardId (para obter closingDay)
+    let cardInfo = null;
+    if (withSuggestion.cardId) {
+      cardInfo = await cardRepo.getCard(withSuggestion.cardId);
+    }
 
     // Processar financiamento (despesas com parcelas de mesmo valor)
     if (financing && financing.current >= 1) {
@@ -3444,12 +3476,20 @@ function createTransactionRepository(cardRepo) {
           ? addMonths(baseInvoiceMonth, offset)
           : undefined;
         
+        // Calcular a data correta para a parcela do financiamento
+        // Primeira parcela: data original
+        // Parcelas futuras: data de fechamento da fatura
+        const financingDate = cardInfo && cardInfo.closingDay
+          ? calculateClosingDate(withSuggestion.date, cardInfo.closingDay, offset)
+          : withSuggestion.date;
+        
         const txRef = push(ref(db, `/users/${uid}/tx`));
         const txId = txRef.key;
         const payload = stripUndefined({
           ...withSuggestion,
           description: cleanDescription,
           id: txId,
+          date: financingDate,
           amount: amountCents / 100, // Mesmo valor para todas as parcelas
           monthKey: monthForFinancing,
           invoiceMonthKey,
@@ -3538,6 +3578,14 @@ function createTransactionRepository(cardRepo) {
         const invoiceMonthKey = withSuggestion.cardId
           ? addMonths(baseInvoiceMonth, offset)
           : undefined;
+        
+        // Calcular a data correta para a parcela
+        // Primeira parcela: data original da compra
+        // Parcelas futuras: data de fechamento da fatura
+        const installmentDate = cardInfo && cardInfo.closingDay
+          ? calculateClosingDate(withSuggestion.date, cardInfo.closingDay, offset)
+          : withSuggestion.date;
+        
         const installmentCents =
           perInstallment + (index - 1 < remainder ? 1 : 0);
         const txRef = push(ref(db, `/users/${uid}/tx`));
@@ -3546,6 +3594,7 @@ function createTransactionRepository(cardRepo) {
           ...withSuggestion,
           description: cleanDescription,
           id: txId,
+          date: installmentDate,
           amount: installmentCents / 100,
           monthKey: monthForInstallment,
           invoiceMonthKey,
