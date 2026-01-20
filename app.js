@@ -135,7 +135,8 @@ const FluentIcons = {
   TextSortAscending: "M3.5 3C3.22386 3 3 3.22386 3 3.5C3 3.77614 3.22386 4 3.5 4H11.5C11.7761 4 12 3.77614 12 3.5C12 3.22386 11.7761 3 11.5 3H3.5ZM3 7.5C3 7.22386 3.22386 7 3.5 7H9.5C9.77614 7 10 7.22386 10 7.5C10 7.77614 9.77614 8 9.5 8H3.5C3.22386 8 3 7.77614 3 7.5ZM3.5 11C3.22386 11 3 11.2239 3 11.5C3 11.7761 3.22386 12 3.5 12H7.5C7.77614 12 8 11.7761 8 11.5C8 11.2239 7.77614 11 7.5 11H3.5ZM3 15.5C3 15.2239 3.22386 15 3.5 15H5.5C5.77614 15 6 15.2239 6 15.5C6 15.7761 5.77614 16 5.5 16H3.5C3.22386 16 3 15.7761 3 15.5ZM14.8536 4.14645C14.6583 3.95118 14.3417 3.95118 14.1464 4.14645L11.6464 6.64645C11.4512 6.84171 11.4512 7.15829 11.6464 7.35355C11.8417 7.54882 12.1583 7.54882 12.3536 7.35355L14 5.70711V16.5C14 16.7761 14.2239 17 14.5 17C14.7761 17 15 16.7761 15 16.5V5.70711L16.6464 7.35355C16.8417 7.54882 17.1583 7.54882 17.3536 7.35355C17.5488 7.15829 17.5488 6.84171 17.3536 6.64645L14.8536 4.14645Z",
   TextSortDescending: "M3.5 3C3.22386 3 3 3.22386 3 3.5C3 3.77614 3.22386 4 3.5 4H5.5C5.77614 4 6 3.77614 6 3.5C6 3.22386 5.77614 3 5.5 3H3.5ZM3 7.5C3 7.22386 3.22386 7 3.5 7H7.5C7.77614 7 8 7.22386 8 7.5C8 7.77614 7.77614 8 7.5 8H3.5C3.22386 8 3 7.77614 3 7.5ZM3.5 11C3.22386 11 3 11.2239 3 11.5C3 11.7761 3.22386 12 3.5 12H9.5C9.77614 12 10 11.7761 10 11.5C10 11.2239 9.77614 11 9.5 11H3.5ZM3 15.5C3 15.2239 3.22386 15 3.5 15H11.5C11.7761 15 12 15.2239 12 15.5C12 15.7761 11.7761 16 11.5 16H3.5C3.22386 16 3 15.7761 3 15.5ZM14.8536 15.8536C14.6583 16.0488 14.3417 16.0488 14.1464 15.8536L11.6464 13.3536C11.4512 13.1583 11.4512 12.8417 11.6464 12.6464C11.8417 12.4512 12.1583 12.4512 12.3536 12.6464L14 14.2929V3.5C14 3.22386 14.2239 3 14.5 3C14.7761 3 15 3.22386 15 3.5V14.2929L16.6464 12.6464C16.8417 12.4512 17.1583 12.4512 17.3536 12.6464C17.5488 12.8417 17.5488 13.1583 17.3536 13.3536L14.8536 15.8536Z",
   Money: "M10 7C8.34315 7 7 8.34315 7 10C7 11.6569 8.34315 13 10 13C11.6569 13 13 11.6569 13 10C13 8.34315 11.6569 7 10 7ZM8 10C8 8.89543 8.89543 8 10 8C11.1046 8 12 8.89543 12 10C12 11.1046 11.1046 12 10 12C8.89543 12 8 11.1046 8 10ZM3 6C3 4.34315 4.34315 3 6 3H14C15.6569 3 17 4.34315 17 6V14C17 15.6569 15.6569 17 14 17H6C4.34315 17 3 15.6569 3 14V6ZM6 4C4.89543 4 4 4.89543 4 6V14C4 15.1046 4.89543 16 6 16H14C15.1046 16 16 15.1046 16 14V6C16 4.89543 15.1046 4 14 4H6Z",
-  NumberSymbol: "M7.5 3C7.77614 3 8 3.22386 8 3.5V7H11.5V3.5C11.5 3.22386 11.7239 3 12 3C12.2761 3 12.5 3.22386 12.5 3.5V7H16.5C16.7761 7 17 7.22386 17 7.5C17 7.77614 16.7761 8 16.5 8H12.5V12H16.5C16.7761 12 17 12.2239 17 12.5C17 12.7761 16.7761 13 16.5 13H12.5V16.5C12.5 16.7761 12.2761 17 12 17C11.7239 17 11.5 16.7761 11.5 16.5V13H8V16.5C8 16.7761 7.77614 17 7.5 17C7.22386 17 7 16.7761 7 16.5V13H3.5C3.22386 13 3 12.7761 3 12.5C3 12.2239 3.22386 12 3.5 12H7V8H3.5C3.22386 8 3 7.77614 3 7.5C3 7.22386 3.22386 7 3.5 7H7V3.5C7 3.22386 7.22386 3 7.5 3ZM8 8V12H11.5V8H8Z"
+  NumberSymbol: "M7.5 3C7.77614 3 8 3.22386 8 3.5V7H11.5V3.5C11.5 3.22386 11.7239 3 12 3C12.2761 3 12.5 3.22386 12.5 3.5V7H16.5C16.7761 7 17 7.22386 17 7.5C17 7.77614 16.7761 8 16.5 8H12.5V12H16.5C16.7761 12 17 12.2239 17 12.5C17 12.7761 16.7761 13 16.5 13H12.5V16.5C12.5 16.7761 12.2761 17 12 17C11.7239 17 11.5 16.7761 11.5 16.5V13H8V16.5C8 16.7761 7.77614 17 7.5 17C7.22386 17 7 16.7761 7 16.5V13H3.5C3.22386 13 3 12.7761 3 12.5C3 12.2239 3.22386 12 3.5 12H7V8H3.5C3.22386 8 3 7.77614 3 7.5C3 7.22386 3.22386 7 3.5 7H7V3.5C7 3.22386 7.22386 3 7.5 3ZM8 8V12H11.5V8H8Z",
+  Stack: "M3.5 6C3.22386 6 3 6.22386 3 6.5C3 6.77614 3.22386 7 3.5 7H16.5C16.7761 7 17 6.77614 17 6.5C17 6.22386 16.7761 6 16.5 6H3.5ZM3 10.5C3 10.2239 3.22386 10 3.5 10H16.5C16.7761 10 17 10.2239 17 10.5C17 10.7761 16.7761 11 16.5 11H3.5C3.22386 11 3 10.7761 3 10.5ZM3.5 14C3.22386 14 3 14.2239 3 14.5C3 14.7761 3.22386 15 3.5 15H16.5C16.7761 15 17 14.7761 17 14.5C17 14.2239 16.7761 14 16.5 14H3.5Z"
 };
 
 function createButton(label, options = {}) {
@@ -2258,11 +2259,9 @@ async function renderTransactionList(title, items, options = {}) {
     return wrapper;
   }
 
-  // Adicionar controles de ordenação se fornecidos
+  // Adicionar controles de ordenação e agrupamento se fornecidos
   let sortControls = null;
-  if (options.sortControls) {
-    const { currentSort, onSortChange } = options.sortControls;
-    
+  if (options.sortControls || options.groupControls) {
     sortControls = document.createElement("div");
     sortControls.className = "sort-controls";
     sortControls.style.display = "flex";
@@ -2270,6 +2269,10 @@ async function renderTransactionList(title, items, options = {}) {
     sortControls.style.marginTop = "1rem";
     sortControls.style.marginBottom = "1rem";
     sortControls.style.flexWrap = "wrap";
+    
+    // Adicionar botões de ordenação se fornecidos
+    if (options.sortControls) {
+      const { currentSort, onSortChange } = options.sortControls;
     
     const sortButtons = [
       { 
@@ -2390,6 +2393,70 @@ async function renderTransactionList(title, items, options = {}) {
       
       sortControls.appendChild(button);
     });
+    }
+    
+    // Adicionar botão de agrupamento se fornecido
+    if (options.groupControls) {
+      const { isGrouped, onToggleGroup } = options.groupControls;
+      
+      // Adicionar separador visual
+      const separator = document.createElement("div");
+      separator.style.width = "1px";
+      separator.style.height = "32px";
+      separator.style.background = "var(--border)";
+      separator.style.margin = "0 0.25rem";
+      sortControls.appendChild(separator);
+      
+      const groupButton = document.createElement("button");
+      groupButton.className = "group-button";
+      
+      if (isGrouped) {
+        groupButton.classList.add("active");
+        groupButton.style.background = "var(--primary)";
+        groupButton.style.color = "white";
+        groupButton.style.border = "1px solid var(--primary)";
+      } else {
+        groupButton.style.background = "var(--surface)";
+        groupButton.style.color = "var(--text)";
+        groupButton.style.border = "1px solid var(--border)";
+      }
+      
+      groupButton.style.padding = "0.5rem 0.75rem";
+      groupButton.style.borderRadius = "var(--radius)";
+      groupButton.style.display = "flex";
+      groupButton.style.alignItems = "center";
+      groupButton.style.gap = "0.5rem";
+      groupButton.style.cursor = "pointer";
+      groupButton.style.transition = "all 0.2s ease";
+      groupButton.style.fontSize = "0.875rem";
+      groupButton.style.fontWeight = "500";
+      
+      const icon = createFluentIcon(FluentIcons.Stack);
+      icon.style.width = "16px";
+      icon.style.height = "16px";
+      
+      const label = document.createElement("span");
+      label.textContent = "Agrupar";
+      
+      groupButton.append(icon, label);
+      
+      groupButton.addEventListener("click", onToggleGroup);
+      
+      // Hover effect
+      groupButton.addEventListener("mouseenter", () => {
+        if (!isGrouped) {
+          groupButton.style.borderColor = "var(--primary)";
+        }
+      });
+      
+      groupButton.addEventListener("mouseleave", () => {
+        if (!isGrouped) {
+          groupButton.style.borderColor = "var(--border)";
+        }
+      });
+      
+      sortControls.appendChild(groupButton);
+    }
   }
 
   // Buscar todos os cartões uma vez para criar um cache
@@ -2400,6 +2467,11 @@ async function renderTransactionList(title, items, options = {}) {
   items.forEach((tx) => {
     const row = document.createElement("div");
     row.className = "transaction-row";
+    
+    // Se for item agrupado, adicionar classe especial
+    if (tx._isGrouped) {
+      row.classList.add("transaction-grouped");
+    }
 
     const normalizedDescription = (tx.description || "").toLowerCase();
     const isAdvanceNegative =
@@ -2415,7 +2487,25 @@ async function renderTransactionList(title, items, options = {}) {
 
     const main = document.createElement("div");
     const titleLine = document.createElement("strong");
-    titleLine.textContent = tx.description || "Sem descrição";
+    
+    // Se for item agrupado, mostrar quantidade
+    if (tx._isGrouped && tx.count > 1) {
+      titleLine.textContent = tx.description || "Sem descrição";
+      const countBadge = document.createElement("span");
+      countBadge.className = "count-badge";
+      countBadge.textContent = `${tx.count}x`;
+      countBadge.style.marginLeft = "0.5rem";
+      countBadge.style.fontSize = "0.75rem";
+      countBadge.style.fontWeight = "600";
+      countBadge.style.color = "var(--primary)";
+      countBadge.style.background = "var(--primary-light)";
+      countBadge.style.padding = "0.125rem 0.375rem";
+      countBadge.style.borderRadius = "var(--radius-sm)";
+      countBadge.title = `${tx.count} transações agrupadas`;
+      titleLine.appendChild(countBadge);
+    } else {
+      titleLine.textContent = tx.description || "Sem descrição";
+    }
     
     // Indicador de parcela
     if (tx.installment && tx.installment.current && tx.installment.total) {
@@ -2483,7 +2573,13 @@ async function renderTransactionList(title, items, options = {}) {
     const metaLine = document.createElement("div");
     metaLine.className = "transaction-meta";
     const cardName = tx.cardId ? cardMap.get(tx.cardId) || null : null;
-    metaLine.textContent = `${getTransactionMeta(tx, cardName)} • ${formatDateLabel(tx.date)}`;
+    
+    // Para itens agrupados, mostrar apenas o tipo
+    if (tx._isGrouped) {
+      metaLine.textContent = getTransactionMeta(tx, cardName);
+    } else {
+      metaLine.textContent = `${getTransactionMeta(tx, cardName)} • ${formatDateLabel(tx.date)}`;
+    }
     main.append(titleLine, metaLine);
 
     const amount = document.createElement("div");
@@ -2515,8 +2611,8 @@ async function renderTransactionList(title, items, options = {}) {
     const actions = document.createElement("div");
     actions.className = "transaction-actions-hidden";
 
-    // Não permitir edição/exclusão de transações virtuais (resumo de fatura)
-    if (!tx._isVirtual) {
+    // Não permitir edição/exclusão de transações virtuais (resumo de fatura) ou agrupadas
+    if (!tx._isVirtual && !tx._isGrouped) {
       const editBtn = document.createElement("button");
       editBtn.className = "icon-button";
       editBtn.appendChild(createFluentIcon(FluentIcons.Edit));
@@ -3216,8 +3312,9 @@ async function renderInvoices() {
   // Container para conteúdo dinâmico
   const dynamicContent = document.createElement("div");
   
-  // Estado de ordenação
+  // Estado de ordenação e agrupamento
   let currentSort = "date-desc";
+  let isGrouped = false;
   
   const renderInvoiceContent = async (selectedMonth) => {
     dynamicContent.innerHTML = "";
@@ -3314,6 +3411,36 @@ async function renderInvoices() {
       buttonContainer
     );
 
+    // Função para agrupar transações por descrição
+    const groupTransactionsByName = (transactions) => {
+      const groups = new Map();
+      
+      transactions.forEach(tx => {
+        const key = (tx.description || "Sem descrição").trim();
+        
+        if (!groups.has(key)) {
+          groups.set(key, {
+            description: key,
+            amount: 0,
+            count: 0,
+            transactions: [],
+            kind: tx.kind,
+            cardId: tx.cardId,
+            invoiceMonthKey: tx.invoiceMonthKey,
+            _isGrouped: true
+          });
+        }
+        
+        const group = groups.get(key);
+        group.amount += Number(tx.amount) || 0;
+        group.count += 1;
+        group.transactions.push(tx);
+      });
+      
+      // Converter para array e ordenar por valor (maior primeiro)
+      return Array.from(groups.values()).sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    };
+
     // Função para ordenar transações
     const sortTransactions = (items, sortType) => {
       const sorted = [...items];
@@ -3359,15 +3486,27 @@ async function renderInvoices() {
       }
     };
 
+    // Preparar itens para renderização (agrupados ou ordenados)
+    const itemsToRender = isGrouped 
+      ? groupTransactionsByName(invoiceItems) 
+      : sortTransactions(invoiceItems, currentSort);
+
     const txList = await renderTransactionList(
       "Transações da fatura",
-      sortTransactions(invoiceItems, currentSort),
+      itemsToRender,
       { 
         showActions: true,
         sortControls: {
           currentSort,
           onSortChange: async (newSort) => {
             currentSort = newSort;
+            await renderInvoiceContent(selectedMonth);
+          }
+        },
+        groupControls: {
+          isGrouped,
+          onToggleGroup: async () => {
+            isGrouped = !isGrouped;
             await renderInvoiceContent(selectedMonth);
           }
         }
