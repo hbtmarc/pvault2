@@ -130,7 +130,12 @@ const FluentIcons = {
   Dismiss: "M4.08859 4.21569C3.87466 4.00176 3.53009 4.00176 3.31616 4.21569C3.10223 4.42962 3.10223 4.77419 3.31616 4.98812L9.32804 11L3.31616 17.0119C3.10223 17.2258 3.10223 17.5704 3.31616 17.7843C3.53009 17.9982 3.87466 17.9982 4.08859 17.7843L10.1005 11.7724L16.1124 17.7843C16.3263 17.9982 16.6709 17.9982 16.8848 17.7843C17.0987 17.5704 17.0987 17.2258 16.8848 17.0119L10.8729 11L16.8848 4.98812C17.0987 4.77419 17.0987 4.42962 16.8848 4.21569C16.6709 4.00176 16.3263 4.00176 16.1124 4.21569L10.1005 10.2276L4.08859 4.21569Z",
   Edit: "M17.7266 2.27344C16.5718 1.11862 14.678 1.11862 13.5232 2.27344L2.92453 12.8721C2.63906 13.1576 2.44524 13.5214 2.36858 13.918L1.51652 17.846C1.38311 18.4993 1.92313 19.0393 2.57645 18.906L6.50405 18.0539C6.90063 17.9773 7.26445 17.7834 7.54992 17.498L18.1486 6.89932C19.3034 5.7445 19.3034 3.8507 18.1486 2.69588L17.7266 2.27344ZM14.2303 2.98055C15.0006 2.21026 16.2491 2.21026 17.0194 2.98055L17.4415 3.40299C18.2118 4.17328 18.2118 5.42182 17.4415 6.19211L16.7595 6.87413L13.5483 3.66289L14.2303 2.98055ZM12.8412 4.37L16.0524 7.58124L6.84281 16.7908C6.69203 16.9416 6.49866 17.0424 6.28787 17.0797L3.0699 17.7482L3.73843 14.5302C3.77573 14.3194 3.87647 14.126 4.02725 13.9753L12.8412 4.37Z",
   Delete: "M8.5 3C8.22386 3 8 3.22386 8 3.5C8 3.77614 8.22386 4 8.5 4H11.5C11.7761 4 12 3.77614 12 3.5C12 3.22386 11.7761 3 11.5 3H8.5ZM4 5C3.72386 5 3.5 5.22386 3.5 5.5C3.5 5.77614 3.72386 6 4 6H16C16.2761 6 16.5 5.77614 16.5 5.5C16.5 5.22386 16.2761 5 16 5H4ZM5.5 7C5.77614 7 6 7.22386 6 7.5V16.5C6 17.3284 6.67157 18 7.5 18H12.5C13.3284 18 14 17.3284 14 16.5V7.5C14 7.22386 14.2239 7 14.5 7C14.7761 7 15 7.22386 15 7.5V16.5C15 17.8807 13.8807 19 12.5 19H7.5C6.11929 19 5 17.8807 5 16.5V7.5C5 7.22386 5.22386 7 5.5 7ZM9 9.5C9 9.22386 8.77614 9 8.5 9C8.22386 9 8 9.22386 8 9.5V15.5C8 15.7761 8.22386 16 8.5 16C8.77614 16 9 15.7761 9 15.5V9.5ZM11.5 9C11.7761 9 12 9.22386 12 9.5V15.5C12 15.7761 11.7761 16 11.5 16C11.2239 16 11 15.7761 11 15.5V9.5C11 9.22386 11.2239 9 11.5 9Z",
-  Add: "M10 3C10.2761 3 10.5 3.22386 10.5 3.5V9.5H16.5C16.7761 9.5 17 9.72386 17 10C17 10.2761 16.7761 10.5 16.5 10.5H10.5V16.5C10.5 16.7761 10.2761 17 10 17C9.72386 17 9.5 16.7761 9.5 16.5V10.5H3.5C3.22386 10.5 3 10.2761 3 10C3 9.72386 3.22386 9.5 3.5 9.5H9.5V3.5C9.5 3.22386 9.72386 3 10 3Z"
+  Add: "M10 3C10.2761 3 10.5 3.22386 10.5 3.5V9.5H16.5C16.7761 9.5 17 9.72386 17 10C17 10.2761 16.7761 10.5 16.5 10.5H10.5V16.5C10.5 16.7761 10.2761 17 10 17C9.72386 17 9.5 16.7761 9.5 16.5V10.5H3.5C3.22386 10.5 3 10.2761 3 10C3 9.72386 3.22386 9.5 3.5 9.5H9.5V3.5C9.5 3.22386 9.72386 3 10 3Z",
+  Calendar: "M14.5 3C14.7761 3 15 3.22386 15 3.5V4H16C17.1046 4 18 4.89543 18 6V16C18 17.1046 17.1046 18 16 18H4C2.89543 18 2 17.1046 2 16V6C2 4.89543 2.89543 4 4 4H5V3.5C5 3.22386 5.22386 3 5.5 3C5.77614 3 6 3.22386 6 3.5V4H14V3.5C14 3.22386 14.2239 3 14.5 3ZM5 5H4C3.44772 5 3 5.44772 3 6V8H17V6C17 5.44772 16.5523 5 16 5H15H14H6H5ZM17 9H3V16C3 16.5523 3.44772 17 4 17H16C16.5523 17 17 16.5523 17 16V9Z",
+  TextSortAscending: "M3.5 3C3.22386 3 3 3.22386 3 3.5C3 3.77614 3.22386 4 3.5 4H11.5C11.7761 4 12 3.77614 12 3.5C12 3.22386 11.7761 3 11.5 3H3.5ZM3 7.5C3 7.22386 3.22386 7 3.5 7H9.5C9.77614 7 10 7.22386 10 7.5C10 7.77614 9.77614 8 9.5 8H3.5C3.22386 8 3 7.77614 3 7.5ZM3.5 11C3.22386 11 3 11.2239 3 11.5C3 11.7761 3.22386 12 3.5 12H7.5C7.77614 12 8 11.7761 8 11.5C8 11.2239 7.77614 11 7.5 11H3.5ZM3 15.5C3 15.2239 3.22386 15 3.5 15H5.5C5.77614 15 6 15.2239 6 15.5C6 15.7761 5.77614 16 5.5 16H3.5C3.22386 16 3 15.7761 3 15.5ZM14.8536 4.14645C14.6583 3.95118 14.3417 3.95118 14.1464 4.14645L11.6464 6.64645C11.4512 6.84171 11.4512 7.15829 11.6464 7.35355C11.8417 7.54882 12.1583 7.54882 12.3536 7.35355L14 5.70711V16.5C14 16.7761 14.2239 17 14.5 17C14.7761 17 15 16.7761 15 16.5V5.70711L16.6464 7.35355C16.8417 7.54882 17.1583 7.54882 17.3536 7.35355C17.5488 7.15829 17.5488 6.84171 17.3536 6.64645L14.8536 4.14645Z",
+  TextSortDescending: "M3.5 3C3.22386 3 3 3.22386 3 3.5C3 3.77614 3.22386 4 3.5 4H5.5C5.77614 4 6 3.77614 6 3.5C6 3.22386 5.77614 3 5.5 3H3.5ZM3 7.5C3 7.22386 3.22386 7 3.5 7H7.5C7.77614 7 8 7.22386 8 7.5C8 7.77614 7.77614 8 7.5 8H3.5C3.22386 8 3 7.77614 3 7.5ZM3.5 11C3.22386 11 3 11.2239 3 11.5C3 11.7761 3.22386 12 3.5 12H9.5C9.77614 12 10 11.7761 10 11.5C10 11.2239 9.77614 11 9.5 11H3.5ZM3 15.5C3 15.2239 3.22386 15 3.5 15H11.5C11.7761 15 12 15.2239 12 15.5C12 15.7761 11.7761 16 11.5 16H3.5C3.22386 16 3 15.7761 3 15.5ZM14.8536 15.8536C14.6583 16.0488 14.3417 16.0488 14.1464 15.8536L11.6464 13.3536C11.4512 13.1583 11.4512 12.8417 11.6464 12.6464C11.8417 12.4512 12.1583 12.4512 12.3536 12.6464L14 14.2929V3.5C14 3.22386 14.2239 3 14.5 3C14.7761 3 15 3.22386 15 3.5V14.2929L16.6464 12.6464C16.8417 12.4512 17.1583 12.4512 17.3536 12.6464C17.5488 12.8417 17.5488 13.1583 17.3536 13.3536L14.8536 15.8536Z",
+  Money: "M10 7C8.34315 7 7 8.34315 7 10C7 11.6569 8.34315 13 10 13C11.6569 13 13 11.6569 13 10C13 8.34315 11.6569 7 10 7ZM8 10C8 8.89543 8.89543 8 10 8C11.1046 8 12 8.89543 12 10C12 11.1046 11.1046 12 10 12C8.89543 12 8 11.1046 8 10ZM3 6C3 4.34315 4.34315 3 6 3H14C15.6569 3 17 4.34315 17 6V14C17 15.6569 15.6569 17 14 17H6C4.34315 17 3 15.6569 3 14V6ZM6 4C4.89543 4 4 4.89543 4 6V14C4 15.1046 4.89543 16 6 16H14C15.1046 16 16 15.1046 16 14V6C16 4.89543 15.1046 4 14 4H6Z",
+  NumberSymbol: "M7.5 3C7.77614 3 8 3.22386 8 3.5V7H11.5V3.5C11.5 3.22386 11.7239 3 12 3C12.2761 3 12.5 3.22386 12.5 3.5V7H16.5C16.7761 7 17 7.22386 17 7.5C17 7.77614 16.7761 8 16.5 8H12.5V12H16.5C16.7761 12 17 12.2239 17 12.5C17 12.7761 16.7761 13 16.5 13H12.5V16.5C12.5 16.7761 12.2761 17 12 17C11.7239 17 11.5 16.7761 11.5 16.5V13H8V16.5C8 16.7761 7.77614 17 7.5 17C7.22386 17 7 16.7761 7 16.5V13H3.5C3.22386 13 3 12.7761 3 12.5C3 12.2239 3.22386 12 3.5 12H7V8H3.5C3.22386 8 3 7.77614 3 7.5C3 7.22386 3.22386 7 3.5 7H7V3.5C7 3.22386 7.22386 3 7.5 3ZM8 8V12H11.5V8H8Z"
 };
 
 function createButton(label, options = {}) {
@@ -2253,6 +2258,140 @@ async function renderTransactionList(title, items, options = {}) {
     return wrapper;
   }
 
+  // Adicionar controles de ordenação se fornecidos
+  let sortControls = null;
+  if (options.sortControls) {
+    const { currentSort, onSortChange } = options.sortControls;
+    
+    sortControls = document.createElement("div");
+    sortControls.className = "sort-controls";
+    sortControls.style.display = "flex";
+    sortControls.style.gap = "0.5rem";
+    sortControls.style.marginTop = "1rem";
+    sortControls.style.marginBottom = "1rem";
+    sortControls.style.flexWrap = "wrap";
+    
+    const sortButtons = [
+      { 
+        id: "date", 
+        label: "Data", 
+        icon: FluentIcons.Calendar,
+        modes: ["date-desc", "date-asc"]
+      },
+      { 
+        id: "alpha", 
+        label: "Nome", 
+        iconAsc: FluentIcons.TextSortAscending,
+        iconDesc: FluentIcons.TextSortDescending,
+        modes: ["alpha-asc", "alpha-desc"]
+      },
+      { 
+        id: "value", 
+        label: "Valor", 
+        icon: FluentIcons.Money,
+        modes: ["value-desc", "value-asc"]
+      },
+      { 
+        id: "installment", 
+        label: "Parcela", 
+        icon: FluentIcons.NumberSymbol,
+        modes: ["installment-asc", "installment-desc"]
+      }
+    ];
+    
+    sortButtons.forEach(btn => {
+      const button = document.createElement("button");
+      button.className = "sort-button";
+      
+      // Determinar se este botão está ativo
+      const isActive = btn.modes.includes(currentSort);
+      
+      if (isActive) {
+        button.classList.add("active");
+        button.style.background = "var(--primary)";
+        button.style.color = "white";
+        button.style.border = "1px solid var(--primary)";
+      } else {
+        button.style.background = "var(--surface)";
+        button.style.color = "var(--text)";
+        button.style.border = "1px solid var(--border)";
+      }
+      
+      button.style.padding = "0.5rem 0.75rem";
+      button.style.borderRadius = "var(--radius)";
+      button.style.display = "flex";
+      button.style.alignItems = "center";
+      button.style.gap = "0.5rem";
+      button.style.cursor = "pointer";
+      button.style.transition = "all 0.2s ease";
+      button.style.fontSize = "0.875rem";
+      button.style.fontWeight = "500";
+      
+      // Ícone - para alfabético, mostrar ícone diferente dependendo da direção
+      let iconPath;
+      if (btn.id === "alpha") {
+        iconPath = currentSort === "alpha-asc" ? btn.iconAsc : btn.iconDesc;
+      } else {
+        iconPath = btn.icon;
+      }
+      
+      const icon = createFluentIcon(iconPath);
+      icon.style.width = "16px";
+      icon.style.height = "16px";
+      
+      const label = document.createElement("span");
+      label.textContent = btn.label;
+      
+      button.append(icon, label);
+      
+      // Adicionar indicador de direção para botão ativo
+      if (isActive) {
+        const direction = document.createElement("span");
+        direction.style.fontSize = "0.75rem";
+        direction.style.opacity = "0.9";
+        if (currentSort.endsWith("-asc")) {
+          direction.textContent = "↑";
+        } else {
+          direction.textContent = "↓";
+        }
+        button.appendChild(direction);
+      }
+      
+      // Click handler - alterna entre as duas direções
+      button.addEventListener("click", () => {
+        const currentMode = currentSort;
+        let newMode;
+        
+        if (btn.modes.includes(currentMode)) {
+          // Se já está ativo, alternar direção
+          const currentIndex = btn.modes.indexOf(currentMode);
+          const nextIndex = (currentIndex + 1) % btn.modes.length;
+          newMode = btn.modes[nextIndex];
+        } else {
+          // Se não está ativo, ativar com primeira direção
+          newMode = btn.modes[0];
+        }
+        
+        onSortChange(newMode);
+      });
+      
+      // Hover effect
+      button.addEventListener("mouseenter", () => {
+        if (!isActive) {
+          button.style.borderColor = "var(--primary)";
+        }
+      });
+      
+      button.addEventListener("mouseleave", () => {
+        if (!isActive) {
+          button.style.borderColor = "var(--border)";
+        }
+      });
+      
+      sortControls.appendChild(button);
+    });
+  }
+
   // Buscar todos os cartões uma vez para criar um cache
   const cards = sortCardsByName(await cardRepository.listCards());
   const cardMap = new Map();
@@ -2484,7 +2623,12 @@ async function renderTransactionList(title, items, options = {}) {
     list.append(row);
   });
 
-  wrapper.append(heading, list);
+  // Montar o wrapper com heading, controles de sort (se houver) e lista
+  if (sortControls) {
+    wrapper.append(heading, sortControls, list);
+  } else {
+    wrapper.append(heading, list);
+  }
   return wrapper;
 }
 
@@ -3072,6 +3216,9 @@ async function renderInvoices() {
   // Container para conteúdo dinâmico
   const dynamicContent = document.createElement("div");
   
+  // Estado de ordenação
+  let currentSort = "date-desc";
+  
   const renderInvoiceContent = async (selectedMonth) => {
     dynamicContent.innerHTML = "";
     
@@ -3167,10 +3314,64 @@ async function renderInvoices() {
       buttonContainer
     );
 
+    // Função para ordenar transações
+    const sortTransactions = (items, sortType) => {
+      const sorted = [...items];
+      
+      switch(sortType) {
+        case "alpha-asc":
+          return sorted.sort((a, b) => 
+            (a.description || "").localeCompare(b.description || "")
+          );
+        case "alpha-desc":
+          return sorted.sort((a, b) => 
+            (b.description || "").localeCompare(a.description || "")
+          );
+        case "value-asc":
+          return sorted.sort((a, b) => 
+            (Number(a.amount) || 0) - (Number(b.amount) || 0)
+          );
+        case "value-desc":
+          return sorted.sort((a, b) => 
+            (Number(b.amount) || 0) - (Number(a.amount) || 0)
+          );
+        case "installment-asc":
+          return sorted.sort((a, b) => {
+            const aNum = a.installment?.current || 0;
+            const bNum = b.installment?.current || 0;
+            return aNum - bNum;
+          });
+        case "installment-desc":
+          return sorted.sort((a, b) => {
+            const aNum = a.installment?.current || 0;
+            const bNum = b.installment?.current || 0;
+            return bNum - aNum;
+          });
+        case "date-asc":
+          return sorted.sort((a, b) => {
+            const dateA = new Date(a.date || 0).getTime();
+            const dateB = new Date(b.date || 0).getTime();
+            return dateA - dateB;
+          });
+        case "date-desc":
+        default:
+          return sortByDateDesc(sorted);
+      }
+    };
+
     const txList = await renderTransactionList(
       "Transações da fatura",
-      sortByDateDesc(invoiceItems),
-      { showActions: true }
+      sortTransactions(invoiceItems, currentSort),
+      { 
+        showActions: true,
+        sortControls: {
+          currentSort,
+          onSortChange: async (newSort) => {
+            currentSort = newSort;
+            await renderInvoiceContent(selectedMonth);
+          }
+        }
+      }
     );
 
     dynamicContent.append(invoiceSummary, txList);
