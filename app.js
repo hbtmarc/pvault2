@@ -9,6 +9,7 @@ import {
   update,
   get,
   set,
+  serverTimestamp,
 } from "./firebase.js";
 
 const routes = {
@@ -19,6 +20,10 @@ const routes = {
   "#/app/transactions": {
     title: "Lançamentos",
     description: "Lista de entradas e saídas recentes.",
+  },
+  "#/app/balanco": {
+    title: "Balanço",
+    description: "Pagamentos e recebimentos do mês selecionado.",
   },
   "#/app/cards": {
     title: "Cartões",
@@ -70,6 +75,7 @@ const categories = {
 const navItems = [
   { label: "Dashboard", hash: "#/app/dashboard" },
   { label: "Lançamentos", hash: "#/app/transactions" },
+  { label: "Balanço", hash: "#/app/balanco" },
   { label: "Cartões", hash: "#/app/cards" },
   { label: "Faturas", hash: "#/app/invoices" },
   { label: "Ajustes", hash: "#/app/import" },
@@ -85,6 +91,18 @@ const authState = {
   ready: false,
 };
 
+const settlementState = {
+  incomeFilter: "all",
+  expenseFilter: "all",
+  busy: false,
+};
+
+const dashboardState = {
+  incomeSort: "date-desc",
+  expenseSort: "date-desc",
+  invoiceSort: "value-desc",
+};
+
 const merchantRulesState = {
   loaded: false,
   rules: {},
@@ -95,6 +113,11 @@ const monthStorageKey = "pvault2-month";
 // Controle de concorrência para renderização
 let renderCounter = 0;
 let isRendering = false;
+
+const viewState = {
+  routeKey: "",
+  refresh: null,
+};
 
 const monthToolbar = document.getElementById("month-toolbar");
 const topTabs = document.getElementById("top-tabs");
@@ -385,7 +408,7 @@ async function setMonth(monthKey) {
   url.searchParams.set("m", monthKey);
   history.replaceState(null, "", url.pathname + url.search + url.hash);
   renderMonthToolbar();
-  await renderRoute();
+  await refreshCurrentView();
 }
 
 function shiftMonth(delta) {
@@ -1085,6 +1108,7 @@ function createTransactionModal() {
       // IMPORTANTE: Ao editar transação, NÃO criar novas parcelas/financiamentos/recorrências
       // Apenas atualizar a transação individual
       const isEditing = transactionModal?.txId;
+      const editingTx = transactionModal?.txData || null;
 
       if (!isEditing && payload.kind === "expense" && payload.cardId) {
         const cardInfo = await cardRepository.getCard(payload.cardId);
@@ -1143,16 +1167,44 @@ function createTransactionModal() {
       
       // Criar ou atualizar transação
       if (isEditing) {
-        await transactionRepository.updateTransaction(
-          transactionModal.txId,
-          payload
+        const isGroupedEdit = Boolean(
+          editingTx && (editingTx.installment || editingTx.financing || editingTx.subscription || editingTx.recurrence)
         );
+        if (isGroupedEdit) {
+          const applyFuture = confirm(
+            "Deseja aplicar esta alteração somente nesta transação?\n\nOK: aplicar nesta e nas futuras\nCancelar: aplicar somente nesta"
+          );
+
+          await transactionRepository.updateTransaction(
+            transactionModal.txId,
+            payload
+          );
+
+          if (applyFuture) {
+            const groupPatch = {
+              description: payload.description,
+              amount: payload.amount,
+              categoryId: payload.categoryId,
+              kind: payload.kind,
+            };
+            await transactionRepository.updateFutureGroupedTransactions(
+              editingTx,
+              groupPatch,
+              { includeCurrent: false }
+            );
+          }
+        } else {
+          await transactionRepository.updateTransaction(
+            transactionModal.txId,
+            payload
+          );
+        }
       } else {
         await transactionRepository.createTransaction(payload);
       }
       
       closeTransactionModal();
-      await renderRoute();
+      await refreshCurrentView();
     } catch (error) {
       console.error('Error saving transaction:', error);
       feedback.textContent = "Não foi possível salvar a transação.";
@@ -1207,7 +1259,7 @@ function showInstallmentDeleteModal(tx) {
     if (confirm(`Excluir apenas a parcela ${tx.installment.current}/${tx.installment.total}?`)) {
       await transactionRepository.deleteTransaction(tx.id);
       document.body.removeChild(overlay);
-      await renderRoute();
+      await refreshCurrentView();
     }
   });
 
@@ -1217,7 +1269,7 @@ function showInstallmentDeleteModal(tx) {
     if (confirm(`Excluir ${remaining} parcela(s) (da ${tx.installment.current} até a ${tx.installment.total})?`)) {
       await transactionRepository.deleteFutureInstallments(tx);
       document.body.removeChild(overlay);
-      await renderRoute();
+      await refreshCurrentView();
     }
   });
 
@@ -1265,7 +1317,7 @@ function showRecurrenceDeleteModal(tx) {
     if (confirm(`Excluir apenas a recorrência ${tx.recurrence.current}/${tx.recurrence.total}?`)) {
       await transactionRepository.deleteTransaction(tx.id);
       document.body.removeChild(overlay);
-      await renderRoute();
+      await refreshCurrentView();
     }
   });
 
@@ -1275,7 +1327,7 @@ function showRecurrenceDeleteModal(tx) {
     if (confirm(`Excluir ${remaining} recorrência(s) (da ${tx.recurrence.current} até a ${tx.recurrence.total})?`)) {
       await transactionRepository.deleteFutureRecurrences(tx);
       document.body.removeChild(overlay);
-      await renderRoute();
+      await refreshCurrentView();
     }
   });
 
@@ -1323,7 +1375,7 @@ function showSubscriptionDeleteModal(tx) {
     if (confirm(`Excluir apenas o mês ${tx.subscription.current}/${tx.subscription.total} desta assinatura?`)) {
       await transactionRepository.deleteTransaction(tx.id);
       document.body.removeChild(overlay);
-      await renderRoute();
+      await refreshCurrentView();
     }
   });
 
@@ -1333,7 +1385,7 @@ function showSubscriptionDeleteModal(tx) {
     if (confirm(`Cancelar assinatura? Serão excluídos ${remaining} mês(es) (do ${tx.subscription.current} até o ${tx.subscription.total})`)) {
       await transactionRepository.deleteFutureSubscriptions(tx);
       document.body.removeChild(overlay);
-      await renderRoute();
+      await refreshCurrentView();
     }
   });
 
@@ -1381,7 +1433,7 @@ function showFinancingDeleteModal(tx) {
     if (confirm(`Excluir apenas a parcela ${tx.financing.current}/${tx.financing.total}?`)) {
       await transactionRepository.deleteTransaction(tx.id);
       document.body.removeChild(overlay);
-      await renderRoute();
+      await refreshCurrentView();
     }
   });
 
@@ -1391,7 +1443,7 @@ function showFinancingDeleteModal(tx) {
     if (confirm(`Excluir ${remaining} parcela(s) (da ${tx.financing.current} até a ${tx.financing.total})?`)) {
       await transactionRepository.deleteFutureFinancings(tx);
       document.body.removeChild(overlay);
-      await renderRoute();
+      await refreshCurrentView();
     }
   });
 
@@ -1419,6 +1471,7 @@ async function openTransactionModal(tx = null, options = {}) {
   }
   const modal = transactionModal;
   modal.txId = tx?.id || null;
+  modal.txData = tx || null;
   modal.title.textContent = tx ? "Editar transação" : "Nova transação";
   
   // Popular select de cartões
@@ -1602,7 +1655,7 @@ async function openTransactionModal(tx = null, options = {}) {
     warningMsg.innerHTML = `
       <strong>⚠️ Transação Agrupada</strong><br>
       Esta transação faz parte de um ${tx.installment ? 'parcelamento' : tx.financing ? 'financiamento' : tx.subscription ? 'assinatura' : 'grupo recorrente'}.<br>
-      Você pode editar apenas campos básicos. Para alterar valores ou parcelas, delete e recadastre.
+      Ao salvar, você poderá aplicar a alteração somente nesta ou também nas futuras.
     `;
     
     // Remover avisos anteriores se existirem
@@ -1743,7 +1796,7 @@ function createCardModal() {
     try {
       await cardRepository.updateCard(cardId, payload);
       closeCardModal();
-      await renderRoute();
+      await refreshCurrentView();
     } catch (error) {
       feedback.textContent = "Não foi possível atualizar o cartão.";
     }
@@ -2248,6 +2301,10 @@ async function renderTransactionList(title, items, options = {}) {
   const heading = document.createElement("h2");
   heading.textContent = title;
 
+  const headerRow = document.createElement("div");
+  headerRow.className = "list-header";
+  headerRow.appendChild(heading);
+
   const list = document.createElement("div");
   list.className = "transaction-list";
 
@@ -2255,7 +2312,7 @@ async function renderTransactionList(title, items, options = {}) {
     const empty = document.createElement("p");
     empty.className = "muted";
     empty.textContent = "Nenhum lançamento encontrado.";
-    wrapper.append(heading, empty);
+    wrapper.append(headerRow, empty);
     return wrapper;
   }
 
@@ -2304,31 +2361,14 @@ async function renderTransactionList(title, items, options = {}) {
     
     sortButtons.forEach(btn => {
       const button = document.createElement("button");
-      button.className = "sort-button";
+      button.className = "sort-button icon-only";
       
       // Determinar se este botão está ativo
       const isActive = btn.modes.includes(currentSort);
       
       if (isActive) {
         button.classList.add("active");
-        button.style.background = "var(--primary)";
-        button.style.color = "white";
-        button.style.border = "1px solid var(--primary)";
-      } else {
-        button.style.background = "var(--surface)";
-        button.style.color = "var(--text)";
-        button.style.border = "1px solid var(--border)";
       }
-      
-      button.style.padding = "0.5rem 0.75rem";
-      button.style.borderRadius = "var(--radius)";
-      button.style.display = "flex";
-      button.style.alignItems = "center";
-      button.style.gap = "0.5rem";
-      button.style.cursor = "pointer";
-      button.style.transition = "all 0.2s ease";
-      button.style.fontSize = "0.875rem";
-      button.style.fontWeight = "500";
       
       // Ícone - para alfabético, mostrar ícone diferente dependendo da direção
       let iconPath;
@@ -2339,26 +2379,12 @@ async function renderTransactionList(title, items, options = {}) {
       }
       
       const icon = createFluentIcon(iconPath);
-      icon.style.width = "16px";
-      icon.style.height = "16px";
-      
-      const label = document.createElement("span");
-      label.textContent = btn.label;
-      
-      button.append(icon, label);
-      
-      // Adicionar indicador de direção para botão ativo
-      if (isActive) {
-        const direction = document.createElement("span");
-        direction.style.fontSize = "0.75rem";
-        direction.style.opacity = "0.9";
-        if (currentSort.endsWith("-asc")) {
-          direction.textContent = "↑";
-        } else {
-          direction.textContent = "↓";
-        }
-        button.appendChild(direction);
-      }
+      icon.classList.add("sort-icon");
+      button.append(icon);
+
+      const directionLabel = currentSort.endsWith("-asc") ? "crescente" : "decrescente";
+      button.setAttribute("aria-label", `${btn.label} (${directionLabel})`);
+      button.title = `${btn.label} (${directionLabel})`;
       
       // Click handler - alterna entre as duas direções
       button.addEventListener("click", () => {
@@ -2379,18 +2405,6 @@ async function renderTransactionList(title, items, options = {}) {
       });
       
       // Hover effect
-      button.addEventListener("mouseenter", () => {
-        if (!isActive) {
-          button.style.borderColor = "var(--primary)";
-        }
-      });
-      
-      button.addEventListener("mouseleave", () => {
-        if (!isActive) {
-          button.style.borderColor = "var(--border)";
-        }
-      });
-      
       sortControls.appendChild(button);
     });
     }
@@ -2408,53 +2422,20 @@ async function renderTransactionList(title, items, options = {}) {
       sortControls.appendChild(separator);
       
       const groupButton = document.createElement("button");
-      groupButton.className = "group-button";
-      
+      groupButton.className = "sort-button icon-only";
       if (isGrouped) {
         groupButton.classList.add("active");
-        groupButton.style.background = "var(--primary)";
-        groupButton.style.color = "white";
-        groupButton.style.border = "1px solid var(--primary)";
-      } else {
-        groupButton.style.background = "var(--surface)";
-        groupButton.style.color = "var(--text)";
-        groupButton.style.border = "1px solid var(--border)";
       }
       
-      groupButton.style.padding = "0.5rem 0.75rem";
-      groupButton.style.borderRadius = "var(--radius)";
-      groupButton.style.display = "flex";
-      groupButton.style.alignItems = "center";
-      groupButton.style.gap = "0.5rem";
-      groupButton.style.cursor = "pointer";
-      groupButton.style.transition = "all 0.2s ease";
-      groupButton.style.fontSize = "0.875rem";
-      groupButton.style.fontWeight = "500";
-      
       const icon = createFluentIcon(FluentIcons.Stack);
-      icon.style.width = "16px";
-      icon.style.height = "16px";
-      
-      const label = document.createElement("span");
-      label.textContent = "Agrupar";
-      
-      groupButton.append(icon, label);
+      icon.classList.add("sort-icon");
+      groupButton.append(icon);
+      groupButton.setAttribute("aria-label", "Agrupar");
+      groupButton.title = "Agrupar";
       
       groupButton.addEventListener("click", onToggleGroup);
       
       // Hover effect
-      groupButton.addEventListener("mouseenter", () => {
-        if (!isGrouped) {
-          groupButton.style.borderColor = "var(--primary)";
-        }
-      });
-      
-      groupButton.addEventListener("mouseleave", () => {
-        if (!isGrouped) {
-          groupButton.style.borderColor = "var(--border)";
-        }
-      });
-      
       sortControls.appendChild(groupButton);
     }
   }
@@ -2505,6 +2486,19 @@ async function renderTransactionList(title, items, options = {}) {
       titleLine.appendChild(countBadge);
     } else {
       titleLine.textContent = tx.description || "Sem descrição";
+    }
+
+    if (
+      options.showSettlementBadge &&
+      tx.settled &&
+      !tx._isGrouped &&
+      (!tx._isVirtual || tx.isInvoiceSummary)
+    ) {
+      const settledBadge = document.createElement("span");
+      settledBadge.className = "settled-badge";
+      settledBadge.textContent = "✓";
+      settledBadge.title = "Pago/Recebido";
+      titleLine.appendChild(settledBadge);
     }
     
     // Indicador de parcela
@@ -2641,7 +2635,7 @@ async function renderTransactionList(title, items, options = {}) {
         } else {
           if (confirm(`Excluir "${tx.description}"?`)) {
             await transactionRepository.deleteTransaction(tx.id);
-            await renderRoute();
+            await refreshCurrentView();
           }
         }
       });
@@ -2721,10 +2715,9 @@ async function renderTransactionList(title, items, options = {}) {
 
   // Montar o wrapper com heading, controles de sort (se houver) e lista
   if (sortControls) {
-    wrapper.append(heading, sortControls, list);
-  } else {
-    wrapper.append(heading, list);
+    headerRow.appendChild(sortControls);
   }
+  wrapper.append(headerRow, list);
   return wrapper;
 }
 
@@ -2745,13 +2738,544 @@ async function renderTransferSection(transfers, options = {}) {
   return details;
 }
 
-async function renderDashboard() {
+async function renderSettlement(target = appView) {
+  const container = target || appView;
+  container.innerHTML = "";
+
+  const [rawTransactions, monthTransactions] = await Promise.all([
+    transactionRepository.listMonthTransactionsRaw(monthState.current),
+    transactionRepository.listMonthTransactions(monthState.current),
+  ]);
+
+  const invoiceSummaries = monthTransactions.filter((tx) => tx.isInvoiceSummary);
+  const invoicePaidMap = new Map();
+  const invoiceItems = await Promise.all(
+    invoiceSummaries.map(async (tx) => {
+      if (!tx.cardId || !tx.invoiceMonthKey) {
+        return { ...tx, paid: false };
+      }
+      const meta = await cardRepository.getInvoiceMeta(tx.cardId, tx.invoiceMonthKey);
+      const paid = Boolean(meta?.paid);
+      invoicePaidMap.set(`${tx.cardId}::${tx.invoiceMonthKey}`, paid);
+      return { ...tx, paid };
+    })
+  );
+
+  const baseTransactions = rawTransactions.filter(
+    (tx) => !tx._isVirtual && !tx._isGrouped
+  );
+  const isCardTransaction = (tx) => Boolean(tx.cardId && tx.invoiceMonthKey);
+  const income = baseTransactions.filter(
+    (tx) => tx.kind === "income" && !isCardTransaction(tx)
+  );
+  const expenses = baseTransactions.filter(
+    (tx) => tx.kind === "expense" && !isCardTransaction(tx)
+  );
+  const transfers = baseTransactions.filter((tx) => tx.kind === "transfer");
+
+  const sumAmount = (items) =>
+    items.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+
+  const summaryGrid = document.createElement("div");
+  summaryGrid.className = "summary-grid tracking-summary";
+
+  const createTrackingCard = (title, rows, variant) => {
+    const card = document.createElement("div");
+    card.className = `card tracking-card ${variant || ""}`.trim();
+    const heading = document.createElement("div");
+    heading.className = "tracking-card-title";
+    heading.textContent = title;
+    const rowList = document.createElement("div");
+    rowList.className = "tracking-card-rows";
+    const valueMap = {};
+    rows.forEach((row) => {
+      const line = document.createElement("div");
+      line.className = "tracking-card-row";
+      const label = document.createElement("span");
+      label.textContent = row.label;
+      const value = document.createElement("span");
+      value.className = `tracking-card-value ${row.variant || ""}`.trim();
+      value.textContent = formatCurrency(row.value);
+      line.append(label, value);
+      rowList.append(line);
+      valueMap[row.key] = value;
+    });
+    card.append(heading, rowList);
+    return { card, valueMap };
+  };
+
+  const createBalanceCard = (title, value) => {
+    const card = document.createElement("div");
+    card.className = "card tracking-card balance";
+    const heading = document.createElement("div");
+    heading.className = "tracking-card-title";
+    heading.textContent = title;
+    const valueEl = document.createElement("div");
+    valueEl.className = `tracking-balance-value ${value >= 0 ? "positive" : "negative"}`;
+    valueEl.textContent = formatCurrency(value);
+    card.append(heading, valueEl);
+    return { card, valueEl };
+  };
+
+  const incomeCard = createTrackingCard(
+    "Receitas",
+    [
+      { key: "plannedIncome", label: "Planejado", value: 0, variant: "positive" },
+      { key: "settledIncome", label: "Recebido", value: 0, variant: "positive" },
+    ],
+    "income"
+  );
+  const expenseCard = createTrackingCard(
+    "Despesas",
+    [
+      { key: "plannedExpense", label: "Planejado", value: 0, variant: "negative" },
+      { key: "settledExpense", label: "Pago", value: 0, variant: "negative" },
+    ],
+    "expense"
+  );
+  const plannedBalanceCard = createBalanceCard("Saldo planejado", 0);
+  const settledBalanceCard = createBalanceCard("Saldo realizado", 0);
+
+  summaryGrid.append(
+    incomeCard.card,
+    expenseCard.card,
+    plannedBalanceCard.card,
+    settledBalanceCard.card
+  );
+
+  const pendingCard = document.createElement("div");
+  pendingCard.className = "card tracking-pending";
+  const pendingTitle = document.createElement("h2");
+  pendingTitle.textContent = "Pendências do mês";
+  const pendingRows = document.createElement("div");
+  pendingRows.className = "tracking-card-rows";
+
+  const pendingIncomeEl = document.createElement("span");
+  const pendingExpenseEl = document.createElement("span");
+
+  [
+    { label: "Receitas pendentes", variant: "positive", valueEl: pendingIncomeEl },
+    { label: "Despesas pendentes", variant: "negative", valueEl: pendingExpenseEl },
+  ].forEach((row) => {
+    const line = document.createElement("div");
+    line.className = "tracking-card-row";
+    const label = document.createElement("span");
+    label.textContent = row.label;
+    row.valueEl.className = `tracking-card-value ${row.variant}`;
+    line.append(label, row.valueEl);
+    pendingRows.append(line);
+  });
+  pendingCard.append(pendingTitle, pendingRows);
+
+  const bulkCard = document.createElement("section");
+  bulkCard.className = "card tracking-actions";
+  const bulkTitle = document.createElement("h2");
+  bulkTitle.textContent = "Ações rápidas";
+  const bulkActions = document.createElement("div");
+  bulkActions.className = "tracking-actions-row";
+
+  const incomeIds = income.map((tx) => tx.id).filter(Boolean);
+  const expenseIds = expenses.map((tx) => tx.id).filter(Boolean);
+  const allIds = [...incomeIds, ...expenseIds];
+
+  const markIncomeButton = createButton("Marcar todas as receitas como recebidas", {
+    variant: "secondary",
+  });
+  const markExpenseButton = createButton("Marcar todas as despesas como pagas", {
+    variant: "secondary",
+  });
+  const clearButton = createButton("Limpar marcações do mês", {
+    variant: "secondary",
+  });
+  clearButton.classList.add("danger");
+
+  const bulkButtons = [markIncomeButton, markExpenseButton, clearButton];
+
+  const filterOptions = [
+    { label: "Todas", value: "all" },
+    { label: "Pendentes", value: "pending" },
+    { label: "Concluídas", value: "settled" },
+  ];
+
+  const applyFilter = (items, filter) => {
+    if (filter === "pending") {
+      return items.filter((tx) => !Boolean(tx.settled));
+    }
+    if (filter === "settled") {
+      return items.filter((tx) => Boolean(tx.settled));
+    }
+    return items;
+  };
+
+  const createFilterChips = (current, onChange) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "tracking-filters";
+    filterOptions.forEach((option) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "filter-chip";
+      button.textContent = option.label;
+      button.classList.toggle("is-active", option.value === current);
+      button.addEventListener("click", () => onChange(option.value));
+      wrapper.append(button);
+    });
+    return wrapper;
+  };
+
+  const renderTrackingListInto = (list, items, kind, emptyMessage) => {
+    list.innerHTML = "";
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      const emptyText = document.createElement("div");
+      emptyText.className = "text-secondary";
+      emptyText.textContent = emptyMessage;
+      empty.append(emptyText);
+      list.append(empty);
+      return;
+    }
+
+    items.forEach((tx) => {
+      const row = document.createElement("div");
+      row.className = "tracking-row";
+
+      const checkLabel = document.createElement("label");
+      checkLabel.className = "tracking-check";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = Boolean(tx.settled);
+      checkbox.disabled = settlementState.busy;
+      const checkText = document.createElement("span");
+      checkText.textContent = kind === "income" ? "Recebido" : "Pago";
+      checkLabel.append(checkbox, checkText);
+
+      checkbox.addEventListener("change", async () => {
+        if (!tx.id) return;
+        const nextValue = checkbox.checked;
+        checkbox.disabled = true;
+        tx.settled = nextValue;
+        updateSummaryValues();
+        renderSections();
+        try {
+          await transactionRepository.updateTransactionSettlement(tx.id, nextValue);
+        } catch (error) {
+          alert("Não foi possível atualizar a transação.");
+          await refreshCurrentView();
+        }
+      });
+
+      const info = document.createElement("div");
+      info.className = "tracking-info";
+      const title = document.createElement("div");
+      title.className = "tracking-title";
+      title.textContent = tx.description || "Sem descrição";
+      const subtitle = document.createElement("div");
+      subtitle.className = "tracking-subtitle";
+      subtitle.textContent = getCategoryLabel(tx.categoryId);
+      info.append(title, subtitle);
+
+      const amount = document.createElement("div");
+      amount.className = `tracking-amount ${kind}`;
+      amount.textContent = formatCurrency(Number(tx.amount) || 0);
+
+      row.append(checkLabel, info, amount);
+      list.append(row);
+    });
+  };
+
+  const renderSection = (title, items, filterKey, emptyMessage) => {
+    const section = document.createElement("section");
+    section.className = "card tracking-section";
+
+    const header = document.createElement("div");
+    header.className = "tracking-header";
+    const titleRow = document.createElement("div");
+    titleRow.className = "tracking-header-row";
+    const heading = document.createElement("h3");
+    heading.className = "section-title";
+    heading.textContent = title;
+    titleRow.append(heading);
+
+    const list = document.createElement("div");
+    list.className = "tracking-list";
+
+    const filters = createFilterChips(settlementState[filterKey], (value) => {
+      settlementState[filterKey] = value;
+      renderSections();
+    });
+
+    header.append(titleRow, filters);
+    section.append(header, list);
+    return { section, list };
+  };
+
+  const incomeSection = renderSection(
+    "Receitas",
+    income,
+    "incomeFilter",
+    "Nenhuma receita encontrada."
+  );
+  const expenseSection = renderSection(
+    "Despesas",
+    expenses,
+    "expenseFilter",
+    "Nenhuma despesa encontrada."
+  );
+
+  const updateSummaryValues = () => {
+    const plannedIncome = sumAmount(income);
+    const plannedExpense = sumAmount(expenses) + sumAmount(invoiceItems);
+    const settledIncome = sumAmount(income.filter((tx) => Boolean(tx.settled)));
+    const settledExpense =
+      sumAmount(expenses.filter((tx) => Boolean(tx.settled))) +
+      sumAmount(invoiceItems.filter((tx) => tx.paid));
+    const plannedBalance = plannedIncome - plannedExpense;
+    const settledBalance = settledIncome - settledExpense;
+    const pendingIncome = plannedIncome - settledIncome;
+    const pendingExpense = plannedExpense - settledExpense;
+
+    incomeCard.valueMap.plannedIncome.textContent = formatCurrency(plannedIncome);
+    incomeCard.valueMap.settledIncome.textContent = formatCurrency(settledIncome);
+    expenseCard.valueMap.plannedExpense.textContent = formatCurrency(plannedExpense);
+    expenseCard.valueMap.settledExpense.textContent = formatCurrency(settledExpense);
+    plannedBalanceCard.valueEl.textContent = formatCurrency(plannedBalance);
+    plannedBalanceCard.valueEl.className = `tracking-balance-value ${plannedBalance >= 0 ? "positive" : "negative"}`;
+    settledBalanceCard.valueEl.textContent = formatCurrency(settledBalance);
+    settledBalanceCard.valueEl.className = `tracking-balance-value ${settledBalance >= 0 ? "positive" : "negative"}`;
+    pendingIncomeEl.textContent = formatCurrency(pendingIncome);
+    pendingExpenseEl.textContent = formatCurrency(pendingExpense);
+  };
+
+  const renderSections = () => {
+    const incomeFiltered = applyFilter(income, settlementState.incomeFilter);
+    const expenseFiltered = applyFilter(expenses, settlementState.expenseFilter);
+
+    renderTrackingListInto(
+      incomeSection.list,
+      [...incomeFiltered].sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0)),
+      "income",
+      "Nenhuma receita encontrada."
+    );
+    renderTrackingListInto(
+      expenseSection.list,
+      [...expenseFiltered].sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0)),
+      "expense",
+      "Nenhuma despesa encontrada."
+    );
+  };
+
+  const runBulkAction = async (action, buttons, applyLocal) => {
+    if (settlementState.busy) return;
+    settlementState.busy = true;
+    buttons.forEach((btn) => {
+      btn.disabled = true;
+    });
+    try {
+      applyLocal();
+      updateSummaryValues();
+      renderSections();
+      await action();
+    } catch (error) {
+      alert("Não foi possível atualizar as marcações.");
+      await refreshCurrentView();
+    } finally {
+      settlementState.busy = false;
+      updateBulkButtonsState();
+    }
+  };
+
+  const updateBulkButtonsState = () => {
+    markIncomeButton.disabled = settlementState.busy || !incomeIds.length;
+    markExpenseButton.disabled = settlementState.busy || !expenseIds.length;
+    clearButton.disabled = settlementState.busy || !allIds.length;
+  };
+
+  markIncomeButton.addEventListener("click", () =>
+    runBulkAction(
+      () => transactionRepository.batchSetSettlement(incomeIds, true),
+      bulkButtons,
+      () => {
+        income.forEach((tx) => {
+          tx.settled = true;
+        });
+      }
+    )
+  );
+  markExpenseButton.addEventListener("click", () =>
+    runBulkAction(
+      () => transactionRepository.batchSetSettlement(expenseIds, true),
+      bulkButtons,
+      () => {
+        expenses.forEach((tx) => {
+          tx.settled = true;
+        });
+      }
+    )
+  );
+  clearButton.addEventListener("click", () =>
+    runBulkAction(
+      () => transactionRepository.batchSetSettlement(allIds, false),
+      bulkButtons,
+      () => {
+        income.forEach((tx) => {
+          tx.settled = false;
+        });
+        expenses.forEach((tx) => {
+          tx.settled = false;
+        });
+      }
+    )
+  );
+
+  updateBulkButtonsState();
+
+  bulkActions.append(markIncomeButton, markExpenseButton, clearButton);
+  bulkCard.append(bulkTitle, bulkActions);
+
+  const invoiceSection = document.createElement("section");
+  invoiceSection.className = "card tracking-section";
+  const invoiceHeader = document.createElement("div");
+  invoiceHeader.className = "tracking-header";
+  const invoiceTitleRow = document.createElement("div");
+  invoiceTitleRow.className = "tracking-header-row";
+  const invoiceTitle = document.createElement("h3");
+  invoiceTitle.className = "section-title";
+  invoiceTitle.textContent = "Faturas de cartões";
+  invoiceTitleRow.append(invoiceTitle);
+  invoiceHeader.append(invoiceTitleRow);
+  const invoiceList = document.createElement("div");
+  invoiceList.className = "tracking-list";
+  invoiceSection.append(invoiceHeader, invoiceList);
+
+  const renderInvoiceList = () => {
+    invoiceList.innerHTML = "";
+    if (!invoiceItems.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      const emptyText = document.createElement("div");
+      emptyText.className = "text-secondary";
+      emptyText.textContent = "Nenhuma fatura encontrada.";
+      empty.append(emptyText);
+      invoiceList.append(empty);
+      return;
+    }
+
+    invoiceItems
+      .sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))
+      .forEach((tx) => {
+        const row = document.createElement("div");
+        row.className = "tracking-row";
+
+        const checkLabel = document.createElement("label");
+        checkLabel.className = "tracking-check";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = Boolean(tx.paid);
+        checkbox.disabled = settlementState.busy;
+        const checkText = document.createElement("span");
+        checkText.textContent = "Pago";
+        checkLabel.append(checkbox, checkText);
+
+        checkbox.addEventListener("change", async () => {
+          if (!tx.cardId || !tx.invoiceMonthKey) return;
+          const nextValue = checkbox.checked;
+          checkbox.disabled = true;
+          tx.paid = nextValue;
+          invoicePaidMap.set(`${tx.cardId}::${tx.invoiceMonthKey}`, nextValue);
+          updateSummaryValues();
+          renderInvoiceList();
+          try {
+            const invoiceTransactions = await transactionRepository.listInvoiceTransactions(
+              tx.cardId,
+              tx.invoiceMonthKey
+            );
+            const expenseIds = invoiceTransactions
+              .filter((item) => item.kind === "expense")
+              .map((item) => item.id)
+              .filter(Boolean);
+            await Promise.all([
+              cardRepository.setInvoicePaid(tx.cardId, tx.invoiceMonthKey, {
+                paid: nextValue,
+                totalCents: Math.round(Math.abs(Number(tx.amount) || 0) * 100),
+              }),
+              transactionRepository.batchSetSettlement(expenseIds, nextValue),
+            ]);
+          } catch (error) {
+            alert("Não foi possível atualizar a fatura.");
+            await refreshCurrentView();
+          }
+        });
+
+        const info = document.createElement("div");
+        info.className = "tracking-info";
+        const title = document.createElement("div");
+        title.className = "tracking-title";
+        title.textContent = tx.description || "Fatura";
+        const subtitle = document.createElement("div");
+        subtitle.className = "tracking-subtitle";
+        subtitle.textContent = tx.invoiceMonthKey
+          ? `Fatura ${tx.invoiceMonthKey}`
+          : "Fatura";
+        info.append(title, subtitle);
+
+        const amount = document.createElement("div");
+        amount.className = "tracking-amount expense";
+        amount.textContent = formatCurrency(Number(tx.amount) || 0);
+
+        row.append(checkLabel, info, amount);
+        invoiceList.append(row);
+      });
+  };
+
+  container.append(
+    summaryGrid,
+    pendingCard,
+    bulkCard,
+    incomeSection.section,
+    expenseSection.section,
+    invoiceSection
+  );
+
+  const transferSection = await renderTransferSection(
+    sortByDateDesc(transfers),
+    { showActions: false }
+  );
+  if (transferSection) {
+    container.append(transferSection);
+  }
+
+  updateSummaryValues();
+  renderSections();
+  renderInvoiceList();
+}
+
+async function renderDashboard(target = appView) {
+  const container = target || appView;
+  container.innerHTML = "";
   const transactions = await transactionRepository.listMonthTransactions(
     monthState.current
   );
 
+  const invoiceSummaries = transactions.filter(
+    (tx) => tx.isInvoiceSummary && tx.cardId && tx.invoiceMonthKey
+  );
+  if (invoiceSummaries.length) {
+    const paidStates = await Promise.all(
+      invoiceSummaries.map(async (tx) => {
+        const meta = await cardRepository.getInvoiceMeta(tx.cardId, tx.invoiceMonthKey);
+        return { id: tx.id, paid: Boolean(meta?.paid) };
+      })
+    );
+    const paidMap = new Map(paidStates.map((entry) => [entry.id, entry.paid]));
+    invoiceSummaries.forEach((tx) => {
+      tx.settled = paidMap.get(tx.id) || false;
+    });
+  }
+
   const income = transactions.filter((tx) => tx.kind === "income");
   const expenses = transactions.filter((tx) => tx.kind === "expense");
+  const invoiceSummariesOnly = expenses.filter((tx) => tx.isInvoiceSummary);
+  const expenseItems = expenses.filter((tx) => !tx.isInvoiceSummary);
   const transfers = transactions.filter((tx) => tx.kind === "transfer");
 
   const totalIncome = income.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
@@ -2802,18 +3326,65 @@ async function renderDashboard() {
     createStatCard("Saldo", balance, "balance", balanceIcon)
   );
 
+  const sortByMode = (items, mode) => {
+    const sorted = [...items];
+    switch (mode) {
+      case "value-asc":
+        return sorted.sort((a, b) => (Number(a.amount) || 0) - (Number(b.amount) || 0));
+      case "value-desc":
+        return sorted.sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0));
+      case "date-asc":
+        return sorted.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+      case "date-desc":
+      default:
+        return sortByDateDesc(sorted);
+    }
+  };
+
+  const handleSortChange = (key, value) => {
+    dashboardState[key] = value;
+    refreshCurrentView();
+  };
+
   // Card de Receitas
   const incomeList = await renderTransactionList(
     "Receitas do mês",
-    sortByDateDesc(income),
-    { showActions: true }
+    sortByMode(income, dashboardState.incomeSort),
+    {
+      showActions: true,
+      showSettlementBadge: true,
+      sortControls: {
+        currentSort: dashboardState.incomeSort,
+        onSortChange: (value) => handleSortChange("incomeSort", value),
+      },
+    }
   );
 
   // Card de Despesas
   const expenseList = await renderTransactionList(
     "Despesas do mês",
-    sortByDateDesc(expenses),
-    { showActions: true }
+    sortByMode(expenseItems, dashboardState.expenseSort),
+    {
+      showActions: true,
+      showSettlementBadge: true,
+      sortControls: {
+        currentSort: dashboardState.expenseSort,
+        onSortChange: (value) => handleSortChange("expenseSort", value),
+      },
+    }
+  );
+
+  const invoiceList = await renderTransactionList(
+    "Faturas de cartões",
+    sortByMode(invoiceSummariesOnly, dashboardState.invoiceSort),
+    {
+      showActions: true,
+      showSettlementBadge: true,
+      sortControls: {
+        currentSort: dashboardState.invoiceSort,
+        onSortChange: (value) => handleSortChange("invoiceSort", value),
+      },
+    }
   );
 
   // Adicionar botão de nova transação (desktop)
@@ -2823,10 +3394,12 @@ async function renderDashboard() {
   addButton.style.marginTop = "1rem";
   addButton.classList.add("desktop-button");
 
-  appView.append(summaryGrid, incomeList, expenseList, addButton);
+  container.append(summaryGrid, incomeList, expenseList, invoiceList, addButton);
 }
 
-async function renderTransactions() {
+async function renderTransactions(target = appView) {
+  const container = target || appView;
+  container.innerHTML = "";
   const transactions = await transactionRepository.listMonthTransactions(
     monthState.current
   );
@@ -2844,7 +3417,7 @@ async function renderTransactions() {
   addButton.style.marginTop = "1rem";
   addButton.classList.add("desktop-button");
 
-  appView.append(list, addButton);
+  container.append(list, addButton);
 }
 
 async function computeCardInvoiceProjection(cardId) {
@@ -2912,7 +3485,9 @@ async function computeCardInvoiceProjection(cardId) {
   return { monthData, adjustedMap, carryBeforeMap, limitAdjustedMap, limitCarryBeforeMap };
 }
 
-async function renderCards() {
+async function renderCards(target = appView) {
+  const container = target || appView;
+  container.innerHTML = "";
   const cardForm = document.createElement("form");
   cardForm.className = "card form";
   
@@ -2994,7 +3569,7 @@ async function renderCards() {
       closingField.input.value = "";
       dueField.input.value = "";
       limitField.input.value = "";
-      await renderRoute();
+      await refreshCurrentView();
     } catch (error) {
       cardFeedback.textContent = "Não foi possível salvar o cartão.";
     }
@@ -3160,7 +3735,7 @@ async function renderCards() {
           if (confirm(`Excluir cartão "${card.name}"? Isso não excluirá as transações associadas.`)) {
             try {
               await cardRepository.deleteCard(card.id);
-              await renderRoute();
+              await refreshCurrentView();
             } catch (error) {
               alert("Não foi possível excluir o cartão.");
             }
@@ -3222,10 +3797,12 @@ async function renderCards() {
     cardsSection.append(cardsHeader, cardsGrid);
   }
 
-  appView.append(cardsSection, cardForm);
+  container.append(cardsSection, cardForm);
 }
 
-async function renderInvoices() {
+async function renderInvoices(target = appView) {
+  const container = target || appView;
+  container.innerHTML = "";
   const cardId = getQueryParam("cardId");
   
   // Cards de seleção de cartões
@@ -3236,7 +3813,7 @@ async function renderInvoices() {
       "Nenhum cartão cadastrado",
       "Cadastre um cartão na página de Cartões para visualizar suas faturas."
     );
-    appView.append(empty);
+    container.append(empty);
     return;
   }
   
@@ -3280,14 +3857,14 @@ async function renderInvoices() {
   });
 
   cardsSection.append(cardsHeader, cardsGrid);
-  appView.append(cardsSection);
+  container.append(cardsSection);
 
   if (!cardId) {
     const empty = createCard(
       "Faturas",
       "Selecione um cartão acima para visualizar suas faturas."
     );
-    appView.append(empty);
+    container.append(empty);
     return;
   }
 
@@ -3297,7 +3874,7 @@ async function renderInvoices() {
       "Cartão não encontrado",
       "O cartão selecionado não existe ou foi removido."
     );
-    appView.append(empty);
+    container.append(empty);
     return;
   }
   
@@ -3537,7 +4114,7 @@ async function renderInvoices() {
   // Renderizar conteúdo inicial
   await renderInvoiceContent(monthState.current);
 
-  appView.append(cardTitle, monthList, dynamicContent);
+  container.append(cardTitle, monthList, dynamicContent);
 }
 
 function isRowImportable(row) {
@@ -3635,7 +4212,7 @@ function renderImportRow(row) {
   checkbox.disabled = !row.isImportable;
   checkbox.addEventListener("change", () => {
     row.isSelected = checkbox.checked;
-    renderRoute();
+    refreshCurrentView();
   });
 
   const info = document.createElement("div");
@@ -3680,7 +4257,7 @@ function renderImportRow(row) {
   includeTransfer.addEventListener("click", () => {
     row.txCandidate.kind = "transfer";
     updateRowStatus(row);
-    renderRoute();
+    refreshCurrentView();
   });
 
   [dateField.input, descField.input, amountField.input].forEach((input) => {
@@ -3698,13 +4275,13 @@ function renderImportRow(row) {
       row.txCandidate.categoryId = categoryField.select.value || undefined;
       applySuggestionIfMissing(row);
       updateRowStatus(row);
-      renderRoute();
+      refreshCurrentView();
     });
   });
   categoryField.select.addEventListener("change", () => {
     row.txCandidate.categoryId = categoryField.select.value || undefined;
     updateRowStatus(row);
-    renderRoute();
+    refreshCurrentView();
   });
 
   editor.append(
@@ -3827,8 +4404,9 @@ async function deleteEverything() {
   await set(userDataRef, null);
 }
 
-async function renderImport() {
-  appView.innerHTML = "";
+async function renderImport(target = appView) {
+  const container = target || appView;
+  container.innerHTML = "";
   
   // Seção de Backup e Restauração
   const backupCard = document.createElement("section");
@@ -3866,7 +4444,7 @@ async function renderImport() {
       try {
         await restoreUserBackup(file);
         alert("Backup restaurado com sucesso!");
-        await renderRoute();
+        await refreshCurrentView();
       } catch (error) {
         alert("Erro ao restaurar backup: " + error.message);
       }
@@ -3901,7 +4479,7 @@ async function renderImport() {
         try {
           await deleteAllTransactions();
           alert("Todas as transações foram apagadas.");
-          await renderRoute();
+          await refreshCurrentView();
         } catch (error) {
           alert("Erro ao apagar transações: " + error.message);
         }
@@ -3955,13 +4533,13 @@ async function renderImport() {
     importState.files = parsedFiles;
     importState.activeFileId = parsedFiles[0]?.id || null;
     importState.summary = null;
-    renderRoute();
+    refreshCurrentView();
   });
 
   uploadCard.append(uploadTitle, uploadInput);
 
   if (!importState.files.length) {
-    appView.append(backupCard, maintenanceCard, uploadCard, createCard("Nenhum arquivo", "Envie um CSV para começar."));
+    container.append(backupCard, maintenanceCard, uploadCard, createCard("Nenhum arquivo", "Envie um CSV para começar."));
     return;
   }
 
@@ -3971,7 +4549,7 @@ async function renderImport() {
     fileTabs.append(
       createTabButton(file.name, importState.activeFileId === file.id, () => {
         importState.activeFileId = file.id;
-        renderRoute();
+        refreshCurrentView();
       })
     );
   });
@@ -3991,7 +4569,7 @@ async function renderImport() {
         activeFile?.activeTab === status,
         () => {
           activeFile.activeTab = status;
-          renderRoute();
+          refreshCurrentView();
         }
       )
     );
@@ -4032,11 +4610,11 @@ async function renderImport() {
       })
     );
     importState.summary = outcomes;
-    renderRoute();
+    refreshCurrentView();
   });
   actionBar.append(importButton);
 
-  appView.append(backupCard, maintenanceCard, uploadCard, fileTabs, statusTabs, stats, list, actionBar);
+  container.append(backupCard, maintenanceCard, uploadCard, fileTabs, statusTabs, stats, list, actionBar);
 
   if (importState.summary) {
     const summaryCard = document.createElement("section");
@@ -4054,8 +4632,17 @@ async function renderImport() {
       summaryList.append(item);
     });
     summaryCard.append(title, summaryList);
-    appView.append(summaryCard);
+    container.append(summaryCard);
   }
+}
+
+async function refreshCurrentView() {
+  const routeKey = normalizeRoute(getRoute());
+  if (viewState.refresh && viewState.routeKey === routeKey) {
+    await viewState.refresh();
+    return;
+  }
+  await renderRoute();
 }
 
 async function renderRoute() {
@@ -4074,7 +4661,18 @@ async function renderRoute() {
   isRendering = true;
   
   try {
-    const routeKey = normalizeRoute(getRoute());
+    const currentHash = getRoute();
+    const hashBase = currentHash.split("?")[0];
+    const hashQuery = currentHash.includes("?")
+      ? currentHash.slice(currentHash.indexOf("?"))
+      : "";
+
+    if (["#/acompanhamento", "#/balanco", "#/app/acompanhamento"].includes(hashBase)) {
+      navigateTo(`#/app/balanco${hashQuery}`);
+      return;
+    }
+
+    const routeKey = normalizeRoute(currentHash);
 
     if (routeKey === "#/login") {
       if (authState.ready && authState.user) {
@@ -4119,7 +4717,12 @@ async function renderRoute() {
 
   const headline = createCard(route.title, route.description);
   appView.innerHTML = "";
-  appView.append(headline);
+  const viewContent = document.createElement("div");
+  viewContent.className = "view-content";
+  appView.append(headline, viewContent);
+
+  viewState.routeKey = routeKey;
+  viewState.refresh = null;
 
   // Remover FAB anterior se existir
   const existingFab = document.querySelector(".fab");
@@ -4128,22 +4731,30 @@ async function renderRoute() {
   }
 
   if (routeKey === "#/app/dashboard") {
-    await renderDashboard();
+    await renderDashboard(viewContent);
+    viewState.refresh = () => renderDashboard(viewContent);
   } else if (routeKey === "#/app/transactions") {
-    await renderTransactions();
+    await renderTransactions(viewContent);
+    viewState.refresh = () => renderTransactions(viewContent);
+  } else if (routeKey === "#/app/balanco") {
+    await renderSettlement(viewContent);
+    viewState.refresh = () => renderSettlement(viewContent);
   } else if (routeKey === "#/app/cards") {
-    await renderCards();
+    await renderCards(viewContent);
+    viewState.refresh = () => renderCards(viewContent);
   } else if (routeKey === "#/app/invoices") {
-    await renderInvoices();
+    await renderInvoices(viewContent);
+    viewState.refresh = () => renderInvoices(viewContent);
   } else if (routeKey === "#/app/import") {
-    await renderImport();
+    await renderImport(viewContent);
+    viewState.refresh = () => renderImport(viewContent);
   } else {
     const info = createCard(
       "Mês ativo",
       `Você está visualizando ${formatMonthLabel(monthState.current)}.`,
       [createButton("Alterar mês", { variant: "secondary" })]
     );
-    appView.append(info);
+    viewContent.append(info);
   }
 
   // Verificar novamente se somos a renderização mais recente antes de finalizar
@@ -4179,6 +4790,9 @@ function normalizeRoute(hash) {
   }
   if (baseHash === "#/transactions") {
     return "#/app/transactions";
+  }
+  if (baseHash === "#/acompanhamento" || baseHash === "#/balanco") {
+    return "#/app/balanco";
   }
   if (baseHash === "#/cards") {
     return "#/app/cards";
@@ -4954,6 +5568,70 @@ function createTransactionRepository(cardRepo) {
     return next;
   }
 
+  async function updateFutureGroupedTransactions(tx, patch, options = {}) {
+    const uid = getUserId();
+    const groupConfig = (() => {
+      if (tx.installment?.groupId) {
+        return { field: "installment", groupId: tx.installment.groupId, current: tx.installment.current };
+      }
+      if (tx.financing?.groupId) {
+        return { field: "financing", groupId: tx.financing.groupId, current: tx.financing.current };
+      }
+      if (tx.subscription?.groupId) {
+        return { field: "subscription", groupId: tx.subscription.groupId, current: tx.subscription.current };
+      }
+      if (tx.recurrence?.groupId) {
+        return { field: "recurrence", groupId: tx.recurrence.groupId, current: tx.recurrence.current };
+      }
+      return null;
+    })();
+
+    if (!groupConfig) return;
+
+    const includeCurrent = options.includeCurrent !== false;
+    const sanitizedPatch = stripUndefined(patch);
+
+    const allTxRef = ref(db, `/users/${uid}/tx`);
+    const snapshot = await get(allTxRef);
+    if (!snapshot.exists()) return;
+
+    const allTransactions = snapshot.val();
+    const updates = {};
+    const recomputeTargets = new Set();
+
+    Object.entries(allTransactions).forEach(([id, transaction]) => {
+      const group = transaction[groupConfig.field];
+      if (!group || group.groupId !== groupConfig.groupId) {
+        return;
+      }
+
+      const shouldInclude = includeCurrent
+        ? group.current >= groupConfig.current
+        : group.current > groupConfig.current;
+
+      if (!shouldInclude) {
+        return;
+      }
+
+      const next = stripUndefined({ ...transaction, ...sanitizedPatch });
+      updates[`/users/${uid}/tx/${id}`] = next;
+
+      if (transaction.cardId && transaction.invoiceMonthKey) {
+        recomputeTargets.add(`${transaction.cardId}::${transaction.invoiceMonthKey}`);
+      }
+    });
+
+    if (!Object.keys(updates).length) return;
+
+    await update(ref(db), updates);
+    await Promise.all(
+      Array.from(recomputeTargets).map((key) => {
+        const [cardId, invoiceMonthKey] = key.split("::");
+        return cardRepo.recomputeInvoiceMeta(cardId, invoiceMonthKey);
+      })
+    );
+  }
+
   async function deleteTransaction(txId) {
     const uid = getUserId();
     const txPath = `/users/${uid}/tx/${txId}`;
@@ -5152,6 +5830,32 @@ function createTransactionRepository(cardRepo) {
     );
   }
 
+  async function updateTransactionSettlement(txId, settled) {
+    if (!txId) return;
+    const uid = getUserId();
+    const basePath = `/users/${uid}/tx/${txId}`;
+    const updates = {
+      [`${basePath}/settled`]: Boolean(settled),
+      [`${basePath}/settledAt`]: settled ? serverTimestamp() : null,
+      [`${basePath}/settledBy`]: settled ? uid : null,
+    };
+    await update(ref(db), updates);
+  }
+
+  async function batchSetSettlement(txIds, settled) {
+    const ids = (txIds || []).filter(Boolean);
+    if (!ids.length) return;
+    const uid = getUserId();
+    const updates = {};
+    ids.forEach((txId) => {
+      const basePath = `/users/${uid}/tx/${txId}`;
+      updates[`${basePath}/settled`] = Boolean(settled);
+      updates[`${basePath}/settledAt`] = settled ? serverTimestamp() : null;
+      updates[`${basePath}/settledBy`] = settled ? uid : null;
+    });
+    await update(ref(db), updates);
+  }
+
   async function listMonthTransactions(monthKey) {
     const uid = getUserId();
     const listRef = ref(db, `/users/${uid}/txByMonth/${monthKey}`);
@@ -5233,6 +5937,23 @@ function createTransactionRepository(cardRepo) {
     return [...nonCardTransactions, ...invoiceSummaries];
   }
 
+  async function listMonthTransactionsRaw(monthKey) {
+    const uid = getUserId();
+    const listRef = ref(db, `/users/${uid}/txByMonth/${monthKey}`);
+    const snapshot = await get(listRef);
+    if (!snapshot.exists()) {
+      return [];
+    }
+    const ids = Object.keys(snapshot.val());
+    const results = await Promise.all(
+      ids.map(async (id) => {
+        const txSnap = await get(ref(db, `/users/${uid}/tx/${id}`));
+        return txSnap.exists() ? txSnap.val() : null;
+      })
+    );
+    return results.filter(Boolean);
+  }
+
   async function listInvoiceTransactions(cardId, invoiceMonthKey) {
     const uid = getUserId();
     const listRef = ref(
@@ -5256,12 +5977,16 @@ function createTransactionRepository(cardRepo) {
   return {
     createTransaction,
     updateTransaction,
+    updateFutureGroupedTransactions,
     deleteTransaction,
     deleteFutureInstallments,
     deleteFutureRecurrences,
     deleteFutureSubscriptions,
     deleteFutureFinancings,
+    updateTransactionSettlement,
+    batchSetSettlement,
     listMonthTransactions,
+    listMonthTransactionsRaw,
     listInvoiceTransactions,
   };
 }
