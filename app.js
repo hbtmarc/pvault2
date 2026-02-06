@@ -2305,6 +2305,12 @@ async function renderTransactionList(title, items, options = {}) {
   headerRow.className = "list-header";
   headerRow.appendChild(heading);
 
+  const subtotalValue = document.createElement("div");
+  subtotalValue.className = "list-subtotal";
+  if (typeof options.subtotalValue === "number") {
+    subtotalValue.textContent = formatCurrency(options.subtotalValue);
+  }
+
   const list = document.createElement("div");
   list.className = "transaction-list";
 
@@ -2714,6 +2720,9 @@ async function renderTransactionList(title, items, options = {}) {
   });
 
   // Montar o wrapper com heading, controles de sort (se houver) e lista
+  if (typeof options.subtotalValue === "number") {
+    headerRow.appendChild(subtotalValue);
+  }
   if (sortControls) {
     headerRow.appendChild(sortControls);
   }
@@ -2994,7 +3003,9 @@ async function renderSettlement(target = appView) {
     const heading = document.createElement("h3");
     heading.className = "section-title";
     heading.textContent = title;
-    titleRow.append(heading);
+    const subtotal = document.createElement("div");
+    subtotal.className = "list-subtotal";
+    titleRow.append(heading, subtotal);
 
     const list = document.createElement("div");
     list.className = "tracking-list";
@@ -3006,7 +3017,7 @@ async function renderSettlement(target = appView) {
 
     header.append(titleRow, filters);
     section.append(header, list);
-    return { section, list };
+    return { section, list, subtotal };
   };
 
   const incomeSection = renderSection(
@@ -3056,11 +3067,17 @@ async function renderSettlement(target = appView) {
       "income",
       "Nenhuma receita encontrada."
     );
+    incomeSection.subtotal.textContent = formatCurrency(
+      incomeFiltered.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
+    );
     renderTrackingListInto(
       expenseSection.list,
       [...expenseFiltered].sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0)),
       "expense",
       "Nenhuma despesa encontrada."
+    );
+    expenseSection.subtotal.textContent = formatCurrency(
+      expenseFiltered.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
     );
   };
 
@@ -3141,7 +3158,9 @@ async function renderSettlement(target = appView) {
   const invoiceTitle = document.createElement("h3");
   invoiceTitle.className = "section-title";
   invoiceTitle.textContent = "Faturas de cartões";
-  invoiceTitleRow.append(invoiceTitle);
+  const invoiceSubtotal = document.createElement("div");
+  invoiceSubtotal.className = "list-subtotal";
+  invoiceTitleRow.append(invoiceTitle, invoiceSubtotal);
   invoiceHeader.append(invoiceTitleRow);
   const invoiceList = document.createElement("div");
   invoiceList.className = "tracking-list";
@@ -3149,6 +3168,11 @@ async function renderSettlement(target = appView) {
 
   const renderInvoiceList = () => {
     invoiceList.innerHTML = "";
+    const invoiceTotal = invoiceItems.reduce(
+      (sum, tx) => sum + (Number(tx.amount) || 0),
+      0
+    );
+    invoiceSubtotal.textContent = formatCurrency(invoiceTotal);
     if (!invoiceItems.length) {
       const empty = document.createElement("div");
       empty.className = "empty-state";
@@ -3353,6 +3377,7 @@ async function renderDashboard(target = appView) {
     {
       showActions: true,
       showSettlementBadge: true,
+      subtotalValue: totalIncome,
       sortControls: {
         currentSort: dashboardState.incomeSort,
         onSortChange: (value) => handleSortChange("incomeSort", value),
@@ -3367,6 +3392,7 @@ async function renderDashboard(target = appView) {
     {
       showActions: true,
       showSettlementBadge: true,
+      subtotalValue: expenseItems.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0),
       sortControls: {
         currentSort: dashboardState.expenseSort,
         onSortChange: (value) => handleSortChange("expenseSort", value),
@@ -3380,6 +3406,7 @@ async function renderDashboard(target = appView) {
     {
       showActions: true,
       showSettlementBadge: true,
+      subtotalValue: invoiceSummariesOnly.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0),
       sortControls: {
         currentSort: dashboardState.invoiceSort,
         onSortChange: (value) => handleSortChange("invoiceSort", value),

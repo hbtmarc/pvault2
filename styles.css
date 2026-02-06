@@ -499,6 +499,14 @@ select option:checked {
   gap: 0.75rem;
 }
 
+.list-subtotal {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .card p {
   margin: 0;
   color: var(--text-secondary);
