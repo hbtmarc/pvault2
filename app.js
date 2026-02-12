@@ -101,6 +101,9 @@ const dashboardState = {
   incomeSort: "date-desc",
   expenseSort: "date-desc",
   invoiceSort: "value-desc",
+  incomeGrouped: false,
+  expenseGrouped: false,
+  invoiceGrouped: false,
 };
 
 const merchantRulesState = {
@@ -2275,6 +2278,103 @@ function sortByDateDesc(list) {
   });
 }
 
+function getTransactionTimestamp(tx) {
+  return new Date(tx?.date || 0).getTime() || 0;
+}
+
+function sortTransactionsByMode(items, sortType) {
+  const sorted = [...items];
+
+  switch (sortType) {
+    case "alpha-asc":
+      return sorted.sort((a, b) =>
+        (a.description || "").localeCompare(b.description || "", "pt-BR", {
+          sensitivity: "base",
+          numeric: true,
+        })
+      );
+    case "alpha-desc":
+      return sorted.sort((a, b) =>
+        (b.description || "").localeCompare(a.description || "", "pt-BR", {
+          sensitivity: "base",
+          numeric: true,
+        })
+      );
+    case "value-asc":
+      return sorted.sort((a, b) => (Number(a.amount) || 0) - (Number(b.amount) || 0));
+    case "value-desc":
+      return sorted.sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0));
+    case "installment-asc":
+      return sorted.sort((a, b) => (a.installment?.current || 0) - (b.installment?.current || 0));
+    case "installment-desc":
+      return sorted.sort((a, b) => (b.installment?.current || 0) - (a.installment?.current || 0));
+    case "date-asc":
+      return sorted.sort((a, b) => getTransactionTimestamp(a) - getTransactionTimestamp(b));
+    case "date-desc":
+    default:
+      return sorted.sort((a, b) => getTransactionTimestamp(b) - getTransactionTimestamp(a));
+  }
+}
+
+function normalizeDescriptionForGrouping(description) {
+  const normalized = (description || "Sem descrição")
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/[^0-9a-z]+/g, "");
+
+  return normalized || "semdescricao";
+}
+
+function groupTransactionsByDescription(transactions) {
+  const groups = new Map();
+
+  transactions.forEach((tx) => {
+    const description = (tx.description || "Sem descrição")
+      .toString()
+      .trim()
+      .replace(/\s+/g, " ") || "Sem descrição";
+    const key = normalizeDescriptionForGrouping(description);
+    const txTimestamp = getTransactionTimestamp(tx);
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        description,
+        amount: 0,
+        count: 0,
+        transactions: [],
+        kind: tx.kind,
+        cardId: tx.cardId,
+        invoiceMonthKey: tx.invoiceMonthKey,
+        categoryId: tx.categoryId,
+        date: tx.date,
+        installment: tx.installment,
+        _latestTimestamp: txTimestamp,
+        _isGrouped: true,
+      });
+    }
+
+    const group = groups.get(key);
+    group.amount += Number(tx.amount) || 0;
+    group.count += 1;
+    group.transactions.push(tx);
+
+    if (txTimestamp > group._latestTimestamp) {
+      group._latestTimestamp = txTimestamp;
+      group.date = tx.date;
+    }
+  });
+
+  return Array.from(groups.values()).map((group) => {
+    delete group._latestTimestamp;
+    return group;
+  });
+}
+
 function sortCardsByName(cards) {
   const normalize = (value) =>
     (value || "")
@@ -2314,7 +2414,18 @@ async function renderTransactionList(title, items, options = {}) {
   const list = document.createElement("div");
   list.className = "transaction-list";
 
-  if (!items.length) {
+  const isGroupedView = Boolean(options.groupControls?.isGrouped);
+  const currentSortMode = options.sortControls?.currentSort;
+
+  let itemsToRender = [...items];
+  if (isGroupedView) {
+    itemsToRender = groupTransactionsByDescription(itemsToRender);
+  }
+  if (currentSortMode) {
+    itemsToRender = sortTransactionsByMode(itemsToRender, currentSortMode);
+  }
+
+  if (!itemsToRender.length) {
     const empty = document.createElement("p");
     empty.className = "muted";
     empty.textContent = "Nenhum lançamento encontrado.";
@@ -2451,7 +2562,7 @@ async function renderTransactionList(title, items, options = {}) {
   const cardMap = new Map();
   cards.forEach(card => cardMap.set(card.id, card.name));
 
-  items.forEach((tx) => {
+  itemsToRender.forEach((tx) => {
     const row = document.createElement("div");
     row.className = "transaction-row";
     
@@ -3350,30 +3461,20 @@ async function renderDashboard(target = appView) {
     createStatCard("Saldo", balance, "balance", balanceIcon)
   );
 
-  const sortByMode = (items, mode) => {
-    const sorted = [...items];
-    switch (mode) {
-      case "value-asc":
-        return sorted.sort((a, b) => (Number(a.amount) || 0) - (Number(b.amount) || 0));
-      case "value-desc":
-        return sorted.sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0));
-      case "date-asc":
-        return sorted.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
-      case "date-desc":
-      default:
-        return sortByDateDesc(sorted);
-    }
-  };
-
   const handleSortChange = (key, value) => {
     dashboardState[key] = value;
+    refreshCurrentView();
+  };
+
+  const handleGroupToggle = (key) => {
+    dashboardState[key] = !dashboardState[key];
     refreshCurrentView();
   };
 
   // Card de Receitas
   const incomeList = await renderTransactionList(
     "Receitas do mês",
-    sortByMode(income, dashboardState.incomeSort),
+    income,
     {
       showActions: true,
       showSettlementBadge: true,
@@ -3382,13 +3483,17 @@ async function renderDashboard(target = appView) {
         currentSort: dashboardState.incomeSort,
         onSortChange: (value) => handleSortChange("incomeSort", value),
       },
+      groupControls: {
+        isGrouped: dashboardState.incomeGrouped,
+        onToggleGroup: () => handleGroupToggle("incomeGrouped"),
+      },
     }
   );
 
   // Card de Despesas
   const expenseList = await renderTransactionList(
     "Despesas do mês",
-    sortByMode(expenseItems, dashboardState.expenseSort),
+    expenseItems,
     {
       showActions: true,
       showSettlementBadge: true,
@@ -3397,12 +3502,16 @@ async function renderDashboard(target = appView) {
         currentSort: dashboardState.expenseSort,
         onSortChange: (value) => handleSortChange("expenseSort", value),
       },
+      groupControls: {
+        isGrouped: dashboardState.expenseGrouped,
+        onToggleGroup: () => handleGroupToggle("expenseGrouped"),
+      },
     }
   );
 
   const invoiceList = await renderTransactionList(
     "Faturas de cartões",
-    sortByMode(invoiceSummariesOnly, dashboardState.invoiceSort),
+    invoiceSummariesOnly,
     {
       showActions: true,
       showSettlementBadge: true,
@@ -3410,6 +3519,10 @@ async function renderDashboard(target = appView) {
       sortControls: {
         currentSort: dashboardState.invoiceSort,
         onSortChange: (value) => handleSortChange("invoiceSort", value),
+      },
+      groupControls: {
+        isGrouped: dashboardState.invoiceGrouped,
+        onToggleGroup: () => handleGroupToggle("invoiceGrouped"),
       },
     }
   );
@@ -4015,89 +4128,9 @@ async function renderInvoices(target = appView) {
       buttonContainer
     );
 
-    // Função para agrupar transações por descrição
-    const groupTransactionsByName = (transactions) => {
-      const groups = new Map();
-      
-      transactions.forEach(tx => {
-        const key = (tx.description || "Sem descrição").trim();
-        
-        if (!groups.has(key)) {
-          groups.set(key, {
-            description: key,
-            amount: 0,
-            count: 0,
-            transactions: [],
-            kind: tx.kind,
-            cardId: tx.cardId,
-            invoiceMonthKey: tx.invoiceMonthKey,
-            _isGrouped: true
-          });
-        }
-        
-        const group = groups.get(key);
-        group.amount += Number(tx.amount) || 0;
-        group.count += 1;
-        group.transactions.push(tx);
-      });
-      
-      // Converter para array e ordenar por valor (maior primeiro)
-      return Array.from(groups.values()).sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-    };
-
-    // Função para ordenar transações
-    const sortTransactions = (items, sortType) => {
-      const sorted = [...items];
-      
-      switch(sortType) {
-        case "alpha-asc":
-          return sorted.sort((a, b) => 
-            (a.description || "").localeCompare(b.description || "")
-          );
-        case "alpha-desc":
-          return sorted.sort((a, b) => 
-            (b.description || "").localeCompare(a.description || "")
-          );
-        case "value-asc":
-          return sorted.sort((a, b) => 
-            (Number(a.amount) || 0) - (Number(b.amount) || 0)
-          );
-        case "value-desc":
-          return sorted.sort((a, b) => 
-            (Number(b.amount) || 0) - (Number(a.amount) || 0)
-          );
-        case "installment-asc":
-          return sorted.sort((a, b) => {
-            const aNum = a.installment?.current || 0;
-            const bNum = b.installment?.current || 0;
-            return aNum - bNum;
-          });
-        case "installment-desc":
-          return sorted.sort((a, b) => {
-            const aNum = a.installment?.current || 0;
-            const bNum = b.installment?.current || 0;
-            return bNum - aNum;
-          });
-        case "date-asc":
-          return sorted.sort((a, b) => {
-            const dateA = new Date(a.date || 0).getTime();
-            const dateB = new Date(b.date || 0).getTime();
-            return dateA - dateB;
-          });
-        case "date-desc":
-        default:
-          return sortByDateDesc(sorted);
-      }
-    };
-
-    // Preparar itens para renderização (agrupados ou ordenados)
-    const itemsToRender = isGrouped 
-      ? groupTransactionsByName(invoiceItems) 
-      : sortTransactions(invoiceItems, currentSort);
-
     const txList = await renderTransactionList(
       "Transações da fatura",
-      itemsToRender,
+      invoiceItems,
       { 
         showActions: true,
         sortControls: {
