@@ -2330,15 +2330,43 @@ function normalizeDescriptionForGrouping(description) {
   return normalized || "semdescricao";
 }
 
+function resolveGroupingDescriptor(rawDescription) {
+  const description = (rawDescription || "Sem descrição")
+    .toString()
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim()
+    .replace(/\s+/g, " ") || "Sem descrição";
+
+  const sourceMatch = description.match(/^(.+?)\s*[-–—:]\s+(.+)$/);
+  if (sourceMatch) {
+    const source = sourceMatch[1].trim();
+    const detail = sourceMatch[2].trim();
+    const sourceKey = normalizeDescriptionForGrouping(source);
+    if (sourceKey && sourceKey !== "semdescricao") {
+      return {
+        key: `source:${sourceKey}`,
+        label: `${source} -`,
+        sourceDetail: detail,
+        groupingType: "source",
+      };
+    }
+  }
+
+  return {
+    key: `full:${normalizeDescriptionForGrouping(description)}`,
+    label: description,
+    sourceDetail: null,
+    groupingType: "full",
+  };
+}
+
 function groupTransactionsByDescription(transactions) {
   const groups = new Map();
 
   transactions.forEach((tx) => {
-    const description = (tx.description || "Sem descrição")
-      .toString()
-      .trim()
-      .replace(/\s+/g, " ") || "Sem descrição";
-    const key = normalizeDescriptionForGrouping(description);
+    const descriptor = resolveGroupingDescriptor(tx.description);
+    const description = descriptor.label;
+    const key = descriptor.key;
     const txTimestamp = getTransactionTimestamp(tx);
 
     if (!groups.has(key)) {
@@ -2347,6 +2375,8 @@ function groupTransactionsByDescription(transactions) {
         amount: 0,
         count: 0,
         transactions: [],
+        sourceDetails: new Set(),
+        _groupingType: descriptor.groupingType,
         kind: tx.kind,
         cardId: tx.cardId,
         invoiceMonthKey: tx.invoiceMonthKey,
@@ -2362,6 +2392,9 @@ function groupTransactionsByDescription(transactions) {
     group.amount += Number(tx.amount) || 0;
     group.count += 1;
     group.transactions.push(tx);
+    if (descriptor.sourceDetail) {
+      group.sourceDetails.add(descriptor.sourceDetail);
+    }
 
     if (txTimestamp > group._latestTimestamp) {
       group._latestTimestamp = txTimestamp;
@@ -2370,6 +2403,18 @@ function groupTransactionsByDescription(transactions) {
   });
 
   return Array.from(groups.values()).map((group) => {
+    if (group._groupingType === "source" && group.sourceDetails.size) {
+      const details = Array.from(group.sourceDetails)
+        .map((detail) => detail.trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base", numeric: true }));
+      if (details.length) {
+        group.description = `${group.description} (${details.join("/")})`;
+      }
+    }
+
+    delete group.sourceDetails;
+    delete group._groupingType;
     delete group._latestTimestamp;
     return group;
   });
