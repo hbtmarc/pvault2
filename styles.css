@@ -474,6 +474,12 @@ select option:checked {
   overflow-x: hidden;
 }
 
+.view-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .card {
   background: var(--surface);
   border-radius: var(--radius-lg);
@@ -495,6 +501,21 @@ select option:checked {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.list-subtotal {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .card p {
@@ -532,6 +553,43 @@ select option:checked {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: 1fr;
+}
+
+.sort-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.sort-button.icon-only {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sort-button.icon-only.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.sort-button.icon-only:hover {
+  border-color: var(--primary);
+}
+
+.sort-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .cards-grid {
@@ -788,6 +846,199 @@ select option:checked {
 
 .transaction-amount.advance {
   color: var(--success);
+}
+
+.settled-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 0.5rem;
+  border-radius: 50%;
+  background: var(--success-bg);
+  color: var(--success);
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.tracking-summary {
+  grid-template-columns: 1fr;
+}
+
+.tracking-card {
+  gap: 0.75rem;
+}
+
+.tracking-card-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tracking-card-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tracking-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.tracking-card-value {
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tracking-card-value.positive {
+  color: var(--success);
+}
+
+.tracking-card-value.negative {
+  color: var(--danger);
+}
+
+.tracking-balance-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.tracking-balance-value.positive {
+  color: var(--success);
+}
+
+.tracking-balance-value.negative {
+  color: var(--danger);
+}
+
+.tracking-actions {
+  gap: 1rem;
+}
+
+.tracking-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tracking-actions-row button {
+  flex: 1;
+  min-width: 200px;
+}
+
+.tracking-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tracking-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tracking-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.filter-chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  border-radius: var(--radius-full);
+  padding: 0.35rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-chip.is-active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.tracking-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.tracking-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tracking-row:last-child {
+  border-bottom: none;
+}
+
+.tracking-check {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.tracking-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
+.tracking-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.tracking-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tracking-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.tracking-amount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.tracking-amount.income {
+  color: var(--success);
+}
+
+.tracking-amount.expense {
+  color: var(--danger);
 }
 
 .transaction-description {
@@ -1480,9 +1731,17 @@ input[type="number"]::-webkit-inner-spin-button {
     gap: 1.5rem;
   }
 
+  .view-content {
+    gap: 1.5rem;
+  }
+
   .summary-grid {
     grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
+  }
+
+  .summary-grid.tracking-summary {
+    grid-template-columns: repeat(4, 1fr);
   }
 
   .card {

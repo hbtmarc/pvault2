@@ -16,6 +16,7 @@ import {
   update,
   get,
   set,
+  serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
 const firebaseConfig = {
@@ -63,6 +64,7 @@ export {
   update,
   get,
   set,
+  serverTimestamp,
   signIn,
   signUp,
   onAuthChange,
