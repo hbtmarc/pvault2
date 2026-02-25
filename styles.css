@@ -132,6 +132,17 @@ body {
   box-shadow: 0 2px 6px 0 rgba(79, 70, 229, 0.1);
 }
 
+.tab-action-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
+  color: white;
+  box-shadow: 0 2px 8px 0 rgba(79, 70, 229, 0.2);
+}
+
+.tab-action-primary:hover {
+  background: linear-gradient(135deg, var(--primary-hover) 0%, #4f46e5 100%);
+  color: white;
+}
+
 .month-toolbar {
   display: flex;
   align-items: center;
@@ -584,9 +595,21 @@ select option:checked {
 }
 
 .invoice-months {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 0.35rem;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.invoice-months .tab {
+  min-width: 0;
+  width: 100%;
+  padding: 0.35rem 0.2rem;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  justify-content: center;
 }
 
 .import-tabs {

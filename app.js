@@ -68,6 +68,7 @@ const categories = {
 };
 
 const navItems = [
+  { label: "+", action: "new-transaction" },
   { label: "Dashboard", hash: "#/app/dashboard" },
   { label: "Lançamentos", hash: "#/app/transactions" },
   { label: "Cartões", hash: "#/app/cards" },
@@ -254,6 +255,20 @@ function createTextArea(labelText, name) {
 function createTabs() {
   topTabs.innerHTML = "";
   navItems.forEach((item) => {
+    if (item.action === "new-transaction") {
+      const button = document.createElement("button");
+      button.className = "tab tab-action-primary";
+      button.type = "button";
+      button.textContent = item.label;
+      button.setAttribute("aria-label", "Adicionar nova transação");
+      button.addEventListener("click", () => {
+        if (!authState.user) return;
+        openTransactionModal();
+      });
+      topTabs.append(button);
+      return;
+    }
+
     if (item.action === "logout") {
       const button = document.createElement("button");
       button.className = "tab";
@@ -357,6 +372,14 @@ function getDefaultMonth() {
   return `${today.getFullYear()}-${month}`;
 }
 
+function isValidMonthKey(value) {
+  if (typeof value !== "string") return false;
+  const match = value.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return false;
+  const month = Number(match[2]);
+  return month >= 1 && month <= 12;
+}
+
 function getMonthFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return params.get("m");
@@ -378,12 +401,25 @@ function getRoute() {
 }
 
 async function setMonth(monthKey) {
-  monthState.current = monthKey;
-  sessionStorage.setItem(monthStorageKey, monthKey);
+  const sanitizedMonth = isValidMonthKey(monthKey) ? monthKey : getDefaultMonth();
+  monthState.current = sanitizedMonth;
+  localStorage.setItem(monthStorageKey, sanitizedMonth);
 
   const url = new URL(window.location.href);
-  url.searchParams.set("m", monthKey);
-  history.replaceState(null, "", url.pathname + url.search + url.hash);
+  url.searchParams.set("m", sanitizedMonth);
+
+  // Manter query de mês da rota de faturas sincronizada com o mês global
+  let nextHash = url.hash;
+  const [baseHash, hashQuery = ""] = (url.hash || "").split("?");
+  if (baseHash === "#/app/invoices") {
+    const hashParams = new URLSearchParams(hashQuery);
+    if (hashParams.has("cardId")) {
+      hashParams.set("m", sanitizedMonth);
+      nextHash = `${baseHash}?${hashParams.toString()}`;
+    }
+  }
+
+  history.replaceState(null, "", url.pathname + url.search + nextHash);
   renderMonthToolbar();
   await renderRoute();
 }
@@ -2178,6 +2214,28 @@ function getMonthSequence(startMonthKey, count) {
   });
 }
 
+function getMonthWindow(centerMonthKey, monthsBefore = 5, monthsAfter = 5) {
+  const [year, month] = centerMonthKey.split("-").map(Number);
+  const centerDate = new Date(year, month - 1, 1);
+  const total = monthsBefore + monthsAfter + 1;
+
+  return Array.from({ length: total }, (_, index) => {
+    const delta = index - monthsBefore;
+    const date = new Date(centerDate.getFullYear(), centerDate.getMonth() + delta, 1);
+    const monthKey = String(date.getMonth() + 1).padStart(2, "0");
+    return `${date.getFullYear()}-${monthKey}`;
+  });
+}
+
+function formatMonthShortLabel(monthKey) {
+  const [year, month] = monthKey.split("-");
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return date
+    .toLocaleDateString("pt-BR", { month: "short" })
+    .replace(".", "")
+    .toLowerCase();
+}
+
 function formatCurrency(amount) {
   const value = Number(amount) || 0;
   return new Intl.NumberFormat("pt-BR", {
@@ -3227,6 +3285,14 @@ async function renderCards() {
 
 async function renderInvoices() {
   const cardId = getQueryParam("cardId");
+  const routeMonth = getQueryParam("m");
+
+  // Se a rota trouxe mês explícito (ex.: link para fatura específica),
+  // sincronizar primeiro com o estado global
+  if (isValidMonthKey(routeMonth) && routeMonth !== monthState.current) {
+    await setMonth(routeMonth);
+    return;
+  }
   
   // Cards de seleção de cartões
   const cards = sortCardsByName(await cardRepository.listCards());
@@ -3517,19 +3583,16 @@ async function renderInvoices() {
   };
   
   // Criar tabs de meses
-  const monthKeys = getMonthSequence(monthState.current, 6);
+  const monthKeys = getMonthWindow(monthState.current, 5, 5);
   monthKeys.forEach((monthKey) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "tab";
-    button.textContent = formatMonthLabel(monthKey);
+    button.textContent = formatMonthShortLabel(monthKey);
+    button.title = formatMonthLabel(monthKey);
     button.classList.toggle("is-active", monthKey === monthState.current);
     button.addEventListener("click", async () => {
-      // Atualizar visual dos tabs
-      monthList.querySelectorAll(".tab").forEach(tab => tab.classList.remove("is-active"));
-      button.classList.add("is-active");
-      // Renderizar conteúdo do mês selecionado
-      await renderInvoiceContent(monthKey);
+      await setMonth(monthKey);
     });
     monthList.append(button);
   });
@@ -4121,12 +4184,6 @@ async function renderRoute() {
   appView.innerHTML = "";
   appView.append(headline);
 
-  // Remover FAB anterior se existir
-  const existingFab = document.querySelector(".fab");
-  if (existingFab) {
-    existingFab.remove();
-  }
-
   if (routeKey === "#/app/dashboard") {
     await renderDashboard();
   } else if (routeKey === "#/app/transactions") {
@@ -4206,13 +4263,13 @@ function navigateTo(hash) {
 
 function syncMonthFromStorage() {
   const urlMonth = getMonthFromUrl();
-  if (urlMonth) {
+  if (isValidMonthKey(urlMonth)) {
     monthState.current = urlMonth;
-    sessionStorage.setItem(monthStorageKey, urlMonth);
+    localStorage.setItem(monthStorageKey, urlMonth);
     return;
   }
-  const stored = sessionStorage.getItem(monthStorageKey);
-  monthState.current = stored || getDefaultMonth();
+  const stored = localStorage.getItem(monthStorageKey);
+  monthState.current = isValidMonthKey(stored) ? stored : getDefaultMonth();
   setMonth(monthState.current);
 }
 
