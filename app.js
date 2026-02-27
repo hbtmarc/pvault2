@@ -819,6 +819,34 @@ function createTransactionModal() {
   recurrenceLabel.append(recurrenceCheckbox, recurrenceText);
   
   recurrenceWrapper.append(recurrenceLabel);
+
+  const applyIncomeCreditMode = () => {
+    const isIncome = kindField.select.value === "income";
+    const invoiceOnlyMode = isIncome && creditCheckbox.checked;
+
+    installmentWrapper.style.display = invoiceOnlyMode ? "none" : "";
+    subscriptionWrapper.style.display = invoiceOnlyMode ? "none" : "";
+    recurrenceWrapper.style.display = invoiceOnlyMode ? "none" : "";
+    totalValueLabel.style.display = invoiceOnlyMode ? "none" : "";
+
+    if (invoiceOnlyMode) {
+      installmentCheckbox.checked = false;
+      installmentInputWrapper.classList.add("hidden");
+      totalValueLabel.classList.add("hidden");
+      totalValueCheckbox.checked = false;
+      installmentInput.input.value = "";
+      installmentCurrentInput.input.value = "1";
+      installmentPreview.textContent = "";
+
+      subscriptionCheckbox.checked = false;
+      subscriptionPreview.classList.add("hidden");
+      subscriptionPreview.textContent = "";
+
+      recurrenceCheckbox.checked = false;
+    } else {
+      totalValueLabel.classList.toggle("hidden", !installmentCheckbox.checked);
+    }
+  };
   
   // ============ LÓGICA DE INTERAÇÃO ENTRE CHECKBOXES ============
   
@@ -848,6 +876,8 @@ function createTransactionModal() {
       financingCurrentInput.input.value = "1";
       financingPreview.textContent = "";
     }
+
+    applyIncomeCreditMode();
   });
   
   // Parcelamento
@@ -936,12 +966,12 @@ function createTransactionModal() {
     }
   });
   
-  // Mostrar/ocultar opção de crédito apenas para despesas
+  // Mostrar/ocultar opção de cartão/fatura para despesas e receitas
   const toggleCreditOption = () => {
-    const isExpense = kindField.select.value === "expense";
-    creditWrapper.classList.toggle("hidden", !isExpense);
+    const canUseCard = kindField.select.value === "expense" || kindField.select.value === "income";
+    creditWrapper.classList.toggle("hidden", !canUseCard);
     
-    if (!isExpense) {
+    if (!canUseCard) {
       creditCheckbox.checked = false;
       creditInputWrapper.classList.add("hidden");
       cardField.select.value = "";
@@ -974,7 +1004,10 @@ function createTransactionModal() {
   kindField.select.addEventListener("change", () => {
     toggleCreditOption();
     toggleFinancingOption();
+    applyIncomeCreditMode();
   });
+
+  applyIncomeCreditMode();
   
   const updateInstallmentPreview = () => {
     const amount = parseFloat(amountField.input.value) || 0;
@@ -1526,6 +1559,7 @@ async function openTransactionModal(tx = null, options = {}) {
   // Popular select de meses de fatura (próximos 12 meses)
   modal.fields.invoiceMonthKey.innerHTML = '<option value="">Nenhum</option>';
   const today = new Date();
+  const addedInvoiceMonths = new Set();
   for (let i = 0; i < 12; i++) {
     const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
     const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -1534,7 +1568,30 @@ async function openTransactionModal(tx = null, options = {}) {
     option.value = monthKey;
     option.textContent = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
     modal.fields.invoiceMonthKey.appendChild(option);
+    addedInvoiceMonths.add(monthKey);
   }
+
+  const ensureInvoiceOption = (monthKey) => {
+    const key = String(monthKey || "").trim();
+    if (!key || addedInvoiceMonths.has(key)) {
+      return;
+    }
+    const match = key.match(/^(\d{4})-(\d{2})$/);
+    if (!match) {
+      return;
+    }
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+    const monthLabel = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    const option = document.createElement("option");
+    option.value = key;
+    option.textContent = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+    modal.fields.invoiceMonthKey.appendChild(option);
+    addedInvoiceMonths.add(key);
+  };
+
+  const defaultCardId = tx?.cardId || options.defaultCard || "";
+  const defaultInvoiceMonth = tx?.invoiceMonthKey || options.defaultInvoiceMonth || "";
+  ensureInvoiceOption(defaultInvoiceMonth);
   
   // Função para calcular a fatura em aberto baseado no cartão e data
   const calculateOpenInvoice = (cardId, transactionDate) => {
@@ -1569,18 +1626,19 @@ async function openTransactionModal(tx = null, options = {}) {
   modal.fields.amount.value = tx?.amount ?? "";
   modal.fields.kind.value = tx?.kind || "expense";
   modal.fields.categoryId.value = tx?.categoryId || "";
-  modal.fields.cardId.value = tx?.cardId || options.defaultCard || "";
-  modal.fields.invoiceMonthKey.value = tx?.invoiceMonthKey || options.defaultInvoiceMonth || "";
+  modal.fields.cardId.value = defaultCardId;
+  modal.fields.invoiceMonthKey.value = defaultInvoiceMonth;
   modal.feedback.textContent = "";
   
   // Atualizar visibilidade dos campos condicionais baseado nos valores
   const updateConditionalFields = () => {
     const isExpense = modal.fields.kind.value === "expense";
+    const canUseCard = modal.fields.kind.value === "expense" || modal.fields.kind.value === "income";
     
-    // Mostrar/esconder crédito baseado em despesa
+    // Mostrar/esconder cartão/fatura baseado no tipo
     const creditSection = document.querySelector(".credit-section");
     if (creditSection) {
-      if (isExpense) {
+      if (canUseCard) {
         creditSection.classList.remove("hidden");
       } else {
         creditSection.classList.add("hidden");
@@ -1594,6 +1652,18 @@ async function openTransactionModal(tx = null, options = {}) {
         financingSection.classList.remove("hidden");
       } else {
         financingSection.classList.add("hidden");
+
+        const financingCheckbox = document.getElementById("financing-checkbox");
+        const financingInputWrapper = document.querySelector(".financing-input-wrapper");
+        const financingTotalInput = document.querySelector("input[name='financingTotal']");
+        const financingCurrentInput = document.querySelector("input[name='financingCurrent']");
+        const financingPreview = document.querySelector(".financing-preview");
+
+        if (financingCheckbox) financingCheckbox.checked = false;
+        if (financingInputWrapper) financingInputWrapper.classList.add("hidden");
+        if (financingTotalInput) financingTotalInput.value = "";
+        if (financingCurrentInput) financingCurrentInput.value = "1";
+        if (financingPreview) financingPreview.textContent = "";
       }
     }
   };
@@ -1616,8 +1686,16 @@ async function openTransactionModal(tx = null, options = {}) {
     const subscriptionCheckbox = document.getElementById("subscription-checkbox");
     const financingCheckbox = document.getElementById("financing-checkbox");
     const recurrenceCheckbox = document.getElementById("recurrence-checkbox");
+
+    if (creditCheckbox) creditCheckbox.disabled = false;
+    if (installmentCheckbox) installmentCheckbox.disabled = false;
+    if (subscriptionCheckbox) subscriptionCheckbox.disabled = false;
+    if (financingCheckbox) financingCheckbox.disabled = false;
+    if (recurrenceCheckbox) recurrenceCheckbox.disabled = false;
     
-    if (creditCheckbox) creditCheckbox.checked = false;
+    const hasDefaultInvoiceContext = Boolean(defaultCardId && defaultInvoiceMonth);
+
+    if (creditCheckbox) creditCheckbox.checked = hasDefaultInvoiceContext;
     if (installmentCheckbox) installmentCheckbox.checked = false;
     if (subscriptionCheckbox) subscriptionCheckbox.checked = false;
     if (financingCheckbox) financingCheckbox.checked = false;
@@ -1629,7 +1707,7 @@ async function openTransactionModal(tx = null, options = {}) {
     const financingInputWrapper = document.querySelector(".financing-input-wrapper");
     const totalValueLabel = document.getElementById("total-value-checkbox")?.parentElement;
     
-    if (creditInputWrapper) creditInputWrapper.classList.add("hidden");
+    if (creditInputWrapper) creditInputWrapper.classList.toggle("hidden", !hasDefaultInvoiceContext);
     if (installmentInputWrapper) installmentInputWrapper.classList.add("hidden");
     if (financingInputWrapper) financingInputWrapper.classList.add("hidden");
     if (totalValueLabel) totalValueLabel.classList.add("hidden");
@@ -1644,6 +1722,15 @@ async function openTransactionModal(tx = null, options = {}) {
     if (financingTotalInput) financingTotalInput.value = "";
     if (financingCurrentInput) financingCurrentInput.value = "1";
     if (totalValueCheckbox) totalValueCheckbox.checked = false;
+
+    if (hasDefaultInvoiceContext) {
+      modal.fields.cardId.value = defaultCardId;
+      modal.fields.invoiceMonthKey.value = defaultInvoiceMonth;
+      const invoiceWrapper = modal.fields.invoiceMonthKey?.closest("label") || modal.fields.invoiceMonthKey?.parentElement;
+      if (invoiceWrapper) {
+        invoiceWrapper.classList.remove("hidden");
+      }
+    }
     
     // Limpar previews
     const installmentPreview = document.querySelector(".installment-preview");
@@ -2292,6 +2379,16 @@ function formatMonthShortLabel(monthKey) {
     .toLowerCase();
 }
 
+function formatMonthYearLabel(monthKey) {
+  if (!monthKey) return "";
+  const [year, month] = String(monthKey).split("-");
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return date
+    .toLocaleDateString("pt-BR", { month: "short", year: "numeric" })
+    .replace(".", "")
+    .toUpperCase();
+}
+
 function formatCurrency(amount) {
   const value = Number(amount) || 0;
   return new Intl.NumberFormat("pt-BR", {
@@ -2321,8 +2418,9 @@ function getTransactionMeta(tx, cardName = null) {
   if (cardName) {
     metaParts.push(cardName);
   }
-  if (tx.invoiceMonthKey) {
-    metaParts.push(`Fatura: ${tx.invoiceMonthKey}`);
+  const invoiceMonthKey = getTxInvoiceMonthKey(tx);
+  if (invoiceMonthKey) {
+    metaParts.push(`Fatura: ${invoiceMonthKey}`);
   }
   const meta = metaParts.length ? ` • ${metaParts.join(" • ")}` : "";
   return `${category}${meta}`;
@@ -2782,6 +2880,20 @@ async function renderTransactionList(title, items, options = {}) {
       subscriptionBadge.style.borderRadius = "var(--radius-sm)";
       subscriptionBadge.title = "Assinatura";
       titleLine.appendChild(subscriptionBadge);
+    }
+
+    if (tx.isAnticipated && tx.anticipatedFromMonthKey) {
+      const anticipatedBadge = document.createElement("span");
+      anticipatedBadge.className = "anticipated-badge";
+      anticipatedBadge.textContent = `Antecipada (de ${formatMonthYearLabel(tx.anticipatedFromMonthKey)})`;
+      anticipatedBadge.style.marginLeft = "0.5rem";
+      anticipatedBadge.style.fontSize = "0.75rem";
+      anticipatedBadge.style.fontWeight = "600";
+      anticipatedBadge.style.color = "#7c3aed";
+      anticipatedBadge.style.background = "#ede9fe";
+      anticipatedBadge.style.padding = "0.125rem 0.375rem";
+      anticipatedBadge.style.borderRadius = "var(--radius-sm)";
+      titleLine.appendChild(anticipatedBadge);
     }
     
     const metaLine = document.createElement("div");
@@ -3859,6 +3971,8 @@ async function renderCards(target = appView) {
           ? 0
           : currentMonthAdjusted;
 
+        const unpaidDebtCents = await cardRepository.getUnpaidTotalCents(card.id);
+
         let futureMonthsRaw = 0;
 
         monthData.forEach((item) => {
@@ -3874,10 +3988,7 @@ async function renderCards(target = appView) {
         const limitCents = Number(card.limitCents) || 0;
         const maxFutureAllowed = Math.max(0, limitCents - currentMonthTotal);
         const futureMonthsTotal = Math.min(futureMonthsRaw, maxFutureAllowed);
-        const availableCents = Math.max(
-          limitCents - currentMonthTotal - futureMonthsTotal,
-          0
-        );
+        const availableCents = limitCents - unpaidDebtCents;
 
         const cardWrapper = document.createElement("div");
         cardWrapper.style.position = "relative";
@@ -4143,6 +4254,217 @@ async function renderInvoices(target = appView) {
   // Estado de ordenação e agrupamento
   let currentSort = "date-desc";
   let isGrouped = false;
+
+  const openAnticipationModal = ({ selectedMonth, groupLabel, installments, onConfirm }) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+
+    const modal = document.createElement("div");
+    modal.className = "modal anticipation-modal";
+
+    const title = document.createElement("h2");
+    title.textContent = `Antecipar parcelas • ${groupLabel}`;
+
+    const subtitle = document.createElement("p");
+    subtitle.className = "text-secondary";
+    subtitle.textContent = "Selecione as parcelas futuras para trazer para a fatura atual.";
+
+    const list = document.createElement("div");
+    list.className = "anticipation-list";
+
+    const selectableById = new Map();
+
+    installments.forEach((tx) => {
+      const row = document.createElement("label");
+      row.className = "anticipation-row";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+
+      const txInvoiceMonth = getTxInvoiceMonthKey(tx);
+      const isFuture = txInvoiceMonth > selectedMonth;
+      const isPaidTx = Boolean(tx.paidAt);
+      const canSelect = isFuture && !isPaidTx;
+
+      checkbox.disabled = !canSelect;
+      checkbox.checked = canSelect;
+
+      if (canSelect) {
+        selectableById.set(tx.id, tx);
+      }
+
+      const monthLabel = formatMonthYearLabel(txInvoiceMonth);
+      const indexLabel = tx.installment?.current && tx.installment?.total
+        ? `${tx.installment.current}/${tx.installment.total}`
+        : "-";
+      const valueCents = Number.isFinite(Number(tx.amountCents))
+        ? Math.round(Number(tx.amountCents))
+        : Math.round((Number(tx.amount) || 0) * 100);
+
+      const text = document.createElement("div");
+      text.className = "anticipation-row-text";
+      text.innerHTML = `
+        <strong>Parcela ${indexLabel}</strong>
+        <small>${monthLabel} • ${formatCurrencyFromCents(valueCents)}${isPaidTx ? " • já paga" : ""}</small>
+      `;
+
+      row.append(checkbox, text);
+      list.append(row);
+    });
+
+    const totalLine = document.createElement("p");
+    totalLine.className = "anticipation-total";
+
+    const discountField = document.createElement("label");
+    discountField.className = "field";
+    const discountLabel = document.createElement("span");
+    discountLabel.textContent = "Desconto (opcional)";
+    const discountInput = document.createElement("input");
+    discountInput.type = "number";
+    discountInput.step = "0.01";
+    discountInput.min = "0";
+    discountInput.placeholder = "0,00";
+    discountField.append(discountLabel, discountInput);
+
+    const feedback = document.createElement("p");
+    feedback.className = "form-feedback";
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    const cancelButton = createButton("Cancelar", {
+      variant: "secondary",
+      onClick: () => overlay.remove(),
+    });
+    const confirmButton = createButton("Confirmar antecipação", {
+      onClick: async () => {
+        feedback.textContent = "";
+        const selectedIds = Array.from(list.querySelectorAll("input[type='checkbox']:checked"))
+          .map((input) => {
+            const row = input.closest("label");
+            const rowIndex = Array.from(list.children).indexOf(row);
+            return installments[rowIndex]?.id;
+          })
+          .filter((id) => selectableById.has(id));
+
+        if (!selectedIds.length) {
+          feedback.textContent = "Selecione ao menos uma parcela futura.";
+          return;
+        }
+
+        const discountCents = Math.max(0, Math.round((Number(discountInput.value) || 0) * 100));
+        confirmButton.disabled = true;
+        cancelButton.disabled = true;
+
+        try {
+          await onConfirm(selectedIds, discountCents);
+          overlay.remove();
+        } catch (error) {
+          feedback.textContent = error?.message || "Não foi possível antecipar as parcelas.";
+        } finally {
+          confirmButton.disabled = false;
+          cancelButton.disabled = false;
+        }
+      },
+    });
+    actions.append(cancelButton, confirmButton);
+
+    const updateTotal = () => {
+      const selectedIds = Array.from(list.querySelectorAll("input[type='checkbox']:checked"))
+        .map((input) => {
+          const row = input.closest("label");
+          const rowIndex = Array.from(list.children).indexOf(row);
+          return installments[rowIndex]?.id;
+        })
+        .filter((id) => selectableById.has(id));
+
+      const totalCents = selectedIds.reduce((sum, id) => {
+        const tx = selectableById.get(id);
+        if (!tx) return sum;
+        const cents = Number.isFinite(Number(tx.amountCents))
+          ? Math.round(Number(tx.amountCents))
+          : Math.round((Number(tx.amount) || 0) * 100);
+        return sum + cents;
+      }, 0);
+
+      totalLine.textContent = `Total que vai para esta fatura: ${formatCurrencyFromCents(totalCents)}`;
+    };
+
+    list.addEventListener("change", updateTotal);
+    updateTotal();
+
+    modal.append(title, subtitle, list, totalLine, discountField, feedback, actions);
+    overlay.append(modal);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        overlay.remove();
+      }
+    });
+    document.body.append(overlay);
+  };
+
+  const buildInstallmentGroupsForMonth = async (selectedMonth, invoiceItems) => {
+    const grouped = new Map();
+    invoiceItems.forEach((tx) => {
+      const groupId = tx?.installment?.groupId || tx?.installmentGroupId;
+      if (!groupId) return;
+      if (!grouped.has(groupId)) {
+        grouped.set(groupId, tx);
+      }
+    });
+
+    const allGaps = await transactionRepository.listAllInstallmentGaps(getUserId());
+    allGaps
+      .filter((gap) => gap.cardId === cardId)
+      .forEach((gap) => {
+        if (!grouped.has(gap.groupId)) {
+          grouped.set(gap.groupId, {
+            description: gap.description || "Compra parcelada",
+            installment: {
+              total: gap.installmentTotal,
+              groupId: gap.groupId,
+            },
+            installmentGroupId: gap.groupId,
+          });
+        }
+      });
+
+    const groups = await Promise.all(
+      Array.from(grouped.entries()).map(async ([groupId, seedTx]) => {
+        const allInstallments = await transactionRepository.listInstallmentsForGroup(
+          getUserId(),
+          cardId,
+          groupId
+        );
+        const gapInfo = await transactionRepository.listInstallmentGaps(
+          getUserId(),
+          cardId,
+          groupId
+        );
+        const selectableFuture = allInstallments.filter((tx) => {
+          const txMonth = getTxInvoiceMonthKey(tx);
+          return txMonth > selectedMonth && !tx.paidAt;
+        });
+        if (!selectableFuture.length && !gapInfo.missingIndices.length) {
+          return null;
+        }
+
+        const groupLabel = (seedTx.description || "Compra parcelada")
+          .replace(/\s+\d{1,2}\s*\/\s*\d{1,2}\s*$/i, "")
+          .trim();
+
+        return {
+          groupId,
+          groupLabel: groupLabel || "Compra parcelada",
+          allInstallments,
+          selectableFutureCount: selectableFuture.length,
+          missingIndices: gapInfo.missingIndices,
+          installmentTotal: gapInfo.installmentTotal,
+        };
+      })
+    );
+
+    return groups.filter(Boolean);
+  };
   
   const renderInvoiceContent = async (selectedMonth) => {
     dynamicContent.innerHTML = "";
@@ -4261,7 +4583,264 @@ async function renderInvoices(target = appView) {
       }
     );
 
-    dynamicContent.append(invoiceSummary, txList);
+    const anticipationGroups = await buildInstallmentGroupsForMonth(selectedMonth, invoiceItems);
+    let anticipationSection = null;
+    if (anticipationGroups.length) {
+      anticipationSection = document.createElement("details");
+      anticipationSection.className = "card";
+      anticipationSection.open = false;
+
+      const summary = document.createElement("summary");
+      const summaryTitle = document.createElement("strong");
+      summaryTitle.textContent = "Antecipar parcelas";
+      summary.append(summaryTitle);
+
+      const subtitle = document.createElement("p");
+      subtitle.className = "text-secondary";
+      subtitle.textContent = "Traga parcelas futuras para a fatura atual.";
+
+      const list = document.createElement("div");
+      list.className = "anticipation-groups";
+
+      const openRestoreInstallmentModal = (group) => {
+        const overlay = document.createElement("div");
+        overlay.className = "modal-overlay";
+
+        const modal = document.createElement("div");
+        modal.className = "modal anticipation-modal";
+        modal.style.maxWidth = "520px";
+
+        const title = document.createElement("h2");
+        title.textContent = "Repor parcela faltante";
+
+        const subtitle = document.createElement("p");
+        subtitle.className = "text-secondary";
+        subtitle.textContent = `Lacunas detectadas em ${group.groupLabel}: ${group.missingIndices
+          .map((index) => `${index}/${group.installmentTotal}`)
+          .join(", ")}`;
+
+        const field = document.createElement("label");
+        field.className = "field";
+        const fieldLabel = document.createElement("span");
+        fieldLabel.textContent = "Informe qual parcela deseja repor";
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "1";
+        input.max = String(group.installmentTotal);
+        input.step = "1";
+        input.value = String(group.missingIndices[0] || "");
+        field.append(fieldLabel, input);
+
+        const feedback = document.createElement("p");
+        feedback.className = "form-feedback";
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        const cancelButton = createButton("Cancelar", {
+          variant: "secondary",
+          onClick: () => overlay.remove(),
+        });
+
+        const confirmButton = createButton("Repor parcela", {
+          onClick: async () => {
+            feedback.textContent = "";
+            const missingIndex = Number(input.value);
+
+            if (!Number.isInteger(missingIndex) || !group.missingIndices.includes(missingIndex)) {
+              feedback.textContent = "Parcela inválida. Informe uma das lacunas exibidas.";
+              return;
+            }
+
+            confirmButton.disabled = true;
+            cancelButton.disabled = true;
+
+            try {
+              const restored = await transactionRepository.restoreMissingInstallmentAuto({
+                uid: getUserId(),
+                cardId,
+                installmentGroupId: group.groupId,
+                missingIndex,
+              });
+
+              overlay.remove();
+              window.setTimeout(() => {
+                const okOverlay = document.createElement("div");
+                okOverlay.className = "modal-overlay";
+                const okModal = document.createElement("div");
+                okModal.className = "modal anticipation-modal";
+                okModal.style.maxWidth = "460px";
+
+                const okTitle = document.createElement("h2");
+                okTitle.textContent = "Reposição concluída";
+                const okText = document.createElement("p");
+                okText.textContent = `Parcela ${restored.restoredIndex}/${restored.total} reposta com sucesso em ${formatMonthYearLabel(restored.restoredMonthKey)}.`;
+
+                const okActions = document.createElement("div");
+                okActions.className = "actions";
+                const okButton = createButton("OK", {
+                  onClick: () => okOverlay.remove(),
+                });
+                okActions.append(okButton);
+
+                okModal.append(okTitle, okText, okActions);
+                okOverlay.append(okModal);
+                okOverlay.addEventListener("click", (event) => {
+                  if (event.target === okOverlay) {
+                    okOverlay.remove();
+                  }
+                });
+                document.body.append(okOverlay);
+              }, 0);
+
+              await renderInvoiceContent(selectedMonth);
+            } catch (error) {
+              feedback.textContent = error?.message || "Não foi possível repor a parcela faltante.";
+              confirmButton.disabled = false;
+              cancelButton.disabled = false;
+            }
+          },
+        });
+
+        actions.append(cancelButton, confirmButton);
+        modal.append(title, subtitle, field, feedback, actions);
+        overlay.append(modal);
+
+        overlay.addEventListener("click", (event) => {
+          if (event.target === overlay) {
+            overlay.remove();
+          }
+        });
+
+        document.body.append(overlay);
+        window.setTimeout(() => input.focus(), 0);
+      };
+
+      anticipationGroups.forEach((group) => {
+        const row = document.createElement("div");
+        row.className = "anticipation-group-item";
+
+        const info = document.createElement("div");
+        info.className = "anticipation-group-info";
+        const name = document.createElement("strong");
+        name.textContent = group.groupLabel;
+        const details = document.createElement("small");
+        const detailsParts = [];
+        if (group.selectableFutureCount > 0) {
+          detailsParts.push(`${group.selectableFutureCount} parcela(s) futura(s) disponível(is)`);
+        }
+        if (group.missingIndices.length > 0) {
+          detailsParts.push(`lacunas: ${group.missingIndices.map((index) => `${index}/${group.installmentTotal}`).join(", ")}`);
+        }
+        details.textContent = detailsParts.join(" • ");
+        info.append(name, details);
+
+        const actionBox = document.createElement("div");
+        actionBox.style.display = "flex";
+        actionBox.style.gap = "0.5rem";
+        actionBox.style.flexWrap = "wrap";
+        actionBox.style.justifyContent = "flex-end";
+
+        if (group.selectableFutureCount > 0) {
+          const anticipateButton = createButton("Antecipar parcelas", {
+            variant: "secondary",
+            onClick: () => {
+              openAnticipationModal({
+                selectedMonth,
+                groupLabel: group.groupLabel,
+                installments: group.allInstallments,
+                onConfirm: async (selectedIds, discountCents) => {
+                  await transactionRepository.anticipateInstallments({
+                    uid: getUserId(),
+                    cardId,
+                    targetMonthKey: selectedMonth,
+                    txIds: selectedIds,
+                    discountCents,
+                  });
+                  await renderInvoiceContent(selectedMonth);
+                },
+              });
+            },
+          });
+          anticipateButton.disabled = paid;
+          actionBox.append(anticipateButton);
+        }
+
+        if (group.missingIndices.length > 0) {
+          const restoreButton = createButton("Repor parcela faltante", {
+            variant: "secondary",
+            onClick: async () => {
+              if (paid) {
+                return;
+              }
+              openRestoreInstallmentModal(group);
+            },
+          });
+          restoreButton.disabled = paid;
+          actionBox.append(restoreButton);
+        }
+
+        row.append(info, actionBox);
+        list.append(row);
+      });
+
+      const collapsibleContent = document.createElement("div");
+      collapsibleContent.append(subtitle, list);
+
+      anticipationSection.append(summary, collapsibleContent);
+    }
+
+    const anticipationBatches = await transactionRepository.listAnticipationBatches(cardId, selectedMonth);
+    let undoSection = null;
+    if (anticipationBatches.length) {
+      undoSection = document.createElement("section");
+      undoSection.className = "card";
+
+      const title = document.createElement("h2");
+      title.textContent = "Antecipações aplicadas";
+      const list = document.createElement("div");
+      list.className = "anticipation-groups";
+
+      anticipationBatches.forEach((batch) => {
+        const row = document.createElement("div");
+        row.className = "anticipation-group-item";
+
+        const info = document.createElement("div");
+        info.className = "anticipation-group-info";
+        const label = document.createElement("strong");
+        label.textContent = `${(batch.txIds || []).length} parcela(s) antecipada(s)`;
+        const detail = document.createElement("small");
+        const discountLabel = Number(batch.discountCents) > 0
+          ? ` • desconto ${formatCurrencyFromCents(batch.discountCents)}`
+          : "";
+        detail.textContent = `${formatDateLabel(new Date(Number(batch.createdAt) || Date.now()).toISOString().split("T")[0])}${discountLabel}`;
+        info.append(label, detail);
+
+        const undoButton = createButton("Desfazer", {
+          variant: "secondary",
+          onClick: async () => {
+            if (!confirm("Deseja desfazer esta antecipação?")) {
+              return;
+            }
+            await transactionRepository.undoAnticipation(batch.id);
+            await renderInvoiceContent(selectedMonth);
+          },
+        });
+        undoButton.disabled = paid;
+
+        row.append(info, undoButton);
+        list.append(row);
+      });
+
+      undoSection.append(title, list);
+    }
+
+    dynamicContent.append(
+      invoiceSummary,
+      ...(anticipationSection ? [anticipationSection] : []),
+      ...(undoSection ? [undoSection] : []),
+      txList
+    );
   };
   
   // Criar tabs de meses
@@ -5032,10 +5611,51 @@ function getUserId() {
 
 function getInvoiceTotalCents(transactions) {
   return transactions.reduce((sum, tx) => {
-    const value = Number(tx.amount) || 0;
-    const cents = Math.round(value * 100);
+    if (!["expense", "income"].includes(tx?.kind) || tx?.kind === "transfer") {
+      return sum;
+    }
+    const cents = Number.isFinite(Number(tx?.amountCents))
+      ? Math.round(Number(tx.amountCents))
+      : Math.round((Number(tx?.amount) || 0) * 100);
     return tx.kind === "income" ? sum - cents : sum + cents;
   }, 0);
+}
+
+function getTxInvoiceMonthKey(tx) {
+  if (!tx || typeof tx !== "object") {
+    return "";
+  }
+  return tx.invoiceMonthKey || tx.statementMonthKey || "";
+}
+
+function normalizeTransactionRecord(tx) {
+  if (!tx || typeof tx !== "object") {
+    return tx;
+  }
+  const normalized = { ...tx };
+  const invoiceMonthKey = getTxInvoiceMonthKey(normalized);
+  if (invoiceMonthKey && !normalized.invoiceMonthKey) {
+    normalized.invoiceMonthKey = invoiceMonthKey;
+  }
+  if (invoiceMonthKey && !normalized.statementMonthKey) {
+    normalized.statementMonthKey = invoiceMonthKey;
+  }
+  if (normalized.cardId && !normalized.paymentMethod) {
+    normalized.paymentMethod = "card";
+  }
+  if (!Number.isFinite(Number(normalized.amountCents)) && Number.isFinite(Number(normalized.amount))) {
+    normalized.amountCents = Math.round(Number(normalized.amount) * 100);
+  }
+  if (normalized.installment?.groupId && !normalized.installmentGroupId) {
+    normalized.installmentGroupId = normalized.installment.groupId;
+  }
+  if (normalized.installment?.current && !normalized.installmentIndex) {
+    normalized.installmentIndex = normalized.installment.current;
+  }
+  if (normalized.installment?.total && !normalized.installmentCount) {
+    normalized.installmentCount = normalized.installment.total;
+  }
+  return normalized;
 }
 
 async function markHistoricalInvoicesPaid(cutoffMonthKey = "2026-01") {
@@ -5117,14 +5737,25 @@ function createCardRepository() {
 
   async function setInvoicePaid(cardId, monthKey, payload) {
     const uid = getUserId();
+    const isPaid = payload?.paid !== false;
+    const now = Date.now();
     const metaPath = `/users/${uid}/invoices/${cardId}/${monthKey}/meta`;
+    const txList = await transactionRepository.listInvoiceTransactions(cardId, monthKey);
     const updates = {};
     updates[metaPath] = stripUndefined({
       ...(await getInvoiceMeta(cardId, monthKey)),
-      paid: true,
-      paidAt: Date.now(),
+      paid: isPaid,
+      paidAt: isPaid ? now : null,
       totalCents: payload.totalCents,
+      updatedAt: now,
     });
+
+    txList
+      .filter((tx) => ["expense", "income"].includes(tx.kind))
+      .forEach((tx) => {
+        updates[`/users/${uid}/tx/${tx.id}/paidAt`] = isPaid ? now : null;
+      });
+
     await update(ref(db), updates);
     await recomputeCardUnpaidTotal(cardId);
   }
@@ -5165,64 +5796,30 @@ function createCardRepository() {
 
   async function recomputeCardUnpaidTotal(cardId) {
     const uid = getUserId();
-    
-    // Primeiro, vamos recomputar TODAS as faturas deste cartão para garantir consistência
-    const invoicesSnapshot = await get(ref(db, `/users/${uid}/invoices/${cardId}`));
-    const updates = {};
-    
-    if (!invoicesSnapshot.exists()) {
-      updates[`/users/${uid}/cards/${cardId}/unpaidTotalCents`] = 0;
-      await update(ref(db), updates);
+    const txSnapshot = await get(ref(db, `/users/${uid}/tx`));
+    if (!txSnapshot.exists()) {
+      await update(ref(db), { [`/users/${uid}/cards/${cardId}/unpaidTotalCents`]: 0 });
       return 0;
     }
-    
-    const invoices = invoicesSnapshot.val();
-    const monthKeys = Object.keys(invoices);
-    
-    // Recomputar cada fatura individualmente
-    await Promise.all(
-      monthKeys.map(async (monthKey) => {
-        const txList = await transactionRepository.listInvoiceTransactions(
-          cardId,
-          monthKey
-        );
-        const invoiceItems = txList.filter((tx) =>
-          ["expense", "income"].includes(tx.kind)
-        );
-        const totalCents = getInvoiceTotalCents(invoiceItems);
-        
-        const current = invoices[monthKey]?.meta || {};
-        const metaPath = `/users/${uid}/invoices/${cardId}/${monthKey}/meta`;
-        
-        // Se não há transações e não está paga, remover o meta completamente
-        if (totalCents === 0 && !current.paid) {
-          updates[`/users/${uid}/invoices/${cardId}/${monthKey}`] = null;
-        } else {
-          // Atualizar com os valores corretos
-          updates[metaPath] = stripUndefined({
-            ...current,
-            monthKey,
-            totalCents,
-            updatedAt: Date.now(),
-          });
-        }
-      })
-    );
-    
-    // Agora calcular o total em aberto baseado nos dados atualizados
-    let total = 0;
-    Object.entries(updates).forEach(([path, value]) => {
-      if (value && path.endsWith('/meta') && !value.paid) {
-        total += Number(value.totalCents) || 0;
-      }
+
+    const transactions = Object.values(txSnapshot.val() || {}).map(normalizeTransactionRecord);
+    const total = transactions.reduce((sum, tx) => {
+      if (!tx || tx.cardId !== cardId) return sum;
+      if (tx.kind !== "expense" && tx.kind !== "income") return sum;
+      if (tx.kind === "transfer" || tx.categoryId === "transfers") return sum;
+      if (tx.paymentMethod && tx.paymentMethod !== "card") return sum;
+      if (tx.paidAt) return sum;
+
+      const cents = Number.isFinite(Number(tx.amountCents))
+        ? Math.round(Number(tx.amountCents))
+        : Math.round((Number(tx.amount) || 0) * 100);
+      return tx.kind === "income" ? sum - cents : sum + cents;
+    }, 0);
+
+    await update(ref(db), {
+      [`/users/${uid}/cards/${cardId}/unpaidTotalCents`]: total,
     });
-    
-    // Adicionar o unpaid total aos updates
-    updates[`/users/${uid}/cards/${cardId}/unpaidTotalCents`] = total;
-    
-    // Aplicar todas as mudanças de uma vez
-    await update(ref(db), updates);
-    
+
     return total;
   }
 
@@ -5265,6 +5862,61 @@ function createCardRepository() {
 }
 
 function createTransactionRepository(cardRepo) {
+  function normalizePayload(payload) {
+    if (!payload || typeof payload !== "object") {
+      return payload;
+    }
+    const normalized = { ...payload };
+    const invoiceMonthKey = getTxInvoiceMonthKey(normalized);
+
+    if (invoiceMonthKey) {
+      normalized.invoiceMonthKey = invoiceMonthKey;
+      normalized.statementMonthKey = invoiceMonthKey;
+    }
+
+    if (normalized.cardId && !normalized.paymentMethod) {
+      normalized.paymentMethod = "card";
+    }
+
+    if (
+      normalized.paymentMethod === "card" &&
+      !normalized.invoiceMonthKey &&
+      normalized.monthKey
+    ) {
+      normalized.invoiceMonthKey = normalized.monthKey;
+      normalized.statementMonthKey = normalized.monthKey;
+    }
+
+    if (!Number.isFinite(Number(normalized.amountCents)) && Number.isFinite(Number(normalized.amount))) {
+      normalized.amountCents = Math.round(Number(normalized.amount) * 100);
+    }
+
+    if (normalized.installment?.groupId && !normalized.installmentGroupId) {
+      normalized.installmentGroupId = normalized.installment.groupId;
+    }
+    if (normalized.installment?.current && !normalized.installmentIndex) {
+      normalized.installmentIndex = normalized.installment.current;
+    }
+    if (normalized.installment?.total && !normalized.installmentCount) {
+      normalized.installmentCount = normalized.installment.total;
+    }
+
+    return stripUndefined(normalized);
+  }
+
+  function createAnticipationBatchId() {
+    return `ant-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+  }
+
+  function validateMonthKey(monthKey) {
+    return /^\d{4}-\d{2}$/.test(String(monthKey || ""));
+  }
+
+  async function getTransactionById(uid, txId) {
+    if (!txId) return null;
+    const txSnap = await get(ref(db, `/users/${uid}/tx/${txId}`));
+    return txSnap.exists() ? normalizeTransactionRecord(txSnap.val()) : null;
+  }
   // Função para calcular a data de fechamento da fatura para parcelas futuras
   function calculateClosingDate(originalDate, closingDay, monthsOffset) {
     if (!closingDay || monthsOffset === 0) {
@@ -5304,21 +5956,22 @@ function createTransactionRepository(cardRepo) {
   }
 
   function buildTransactionUpdates(uid, txId, payload) {
+    const normalized = normalizePayload(payload);
     const updates = {};
-    updates[`/users/${uid}/tx/${txId}`] = payload;
+    updates[`/users/${uid}/tx/${txId}`] = normalized;
 
-    if (payload.monthKey) {
-      updates[`/users/${uid}/txByMonth/${payload.monthKey}/${txId}`] = true;
+    if (normalized.monthKey) {
+      updates[`/users/${uid}/txByMonth/${normalized.monthKey}/${txId}`] = true;
     }
 
-    if (payload.cardId && payload.invoiceMonthKey) {
+    if (normalized.cardId && normalized.invoiceMonthKey) {
       updates[
-        `/users/${uid}/cardTxByInvoice/${payload.cardId}/${payload.invoiceMonthKey}/${txId}`
+        `/users/${uid}/cardTxByInvoice/${normalized.cardId}/${normalized.invoiceMonthKey}/${txId}`
       ] = true;
       updates[
-        `/users/${uid}/invoices/${payload.cardId}/${payload.invoiceMonthKey}/meta`
+        `/users/${uid}/invoices/${normalized.cardId}/${normalized.invoiceMonthKey}/meta`
       ] = stripUndefined({
-        monthKey: payload.invoiceMonthKey,
+        monthKey: normalized.invoiceMonthKey,
         updatedAt: Date.now(),
       });
     }
@@ -5328,7 +5981,7 @@ function createTransactionRepository(cardRepo) {
 
   async function createTransaction(tx) {
     const uid = getUserId();
-    const withSuggestion = { ...tx };
+    const withSuggestion = normalizePayload({ ...tx });
     if (!withSuggestion.categoryId) {
       withSuggestion.categoryId = suggestCategory(withSuggestion);
     }
@@ -5638,6 +6291,9 @@ function createTransactionRepository(cardRepo) {
             total: installment.total,
             groupId,
           },
+          installmentGroupId: groupId,
+          installmentIndex: index,
+          installmentCount: installment.total,
         });
         Object.assign(updates, buildTransactionUpdates(uid, txId, payload));
         if (payload.cardId && payload.invoiceMonthKey) {
@@ -5657,7 +6313,7 @@ function createTransactionRepository(cardRepo) {
 
     const txRef = push(ref(db, `/users/${uid}/tx`));
     const txId = txRef.key;
-    const payload = stripUndefined({ ...withSuggestion, id: txId });
+    const payload = normalizePayload({ ...withSuggestion, id: txId });
     const updates = buildTransactionUpdates(uid, txId, payload);
 
     await update(ref(db), updates);
@@ -5674,9 +6330,9 @@ function createTransactionRepository(cardRepo) {
     if (!snapshot.exists()) {
       throw new Error("Transação não encontrada.");
     }
-    const current = snapshot.val();
+    const current = normalizeTransactionRecord(snapshot.val());
     const sanitizedPatch = stripUndefined(patch);
-    const next = { ...current, ...sanitizedPatch };
+    const next = normalizePayload({ ...current, ...sanitizedPatch });
 
     const updates = {};
     updates[txPath] = stripUndefined(next);
@@ -5688,44 +6344,46 @@ function createTransactionRepository(cardRepo) {
       updates[`/users/${uid}/txByMonth/${next.monthKey}/${txId}`] = true;
     }
 
-    const currentCardKey = current.cardId && current.invoiceMonthKey;
-    const nextCardKey = next.cardId && next.invoiceMonthKey;
+    const currentInvoiceMonthKey = getTxInvoiceMonthKey(current);
+    const nextInvoiceMonthKey = getTxInvoiceMonthKey(next);
+    const currentCardKey = current.cardId && currentInvoiceMonthKey;
+    const nextCardKey = next.cardId && nextInvoiceMonthKey;
 
     if (
       currentCardKey &&
       (current.cardId !== next.cardId ||
-        current.invoiceMonthKey !== next.invoiceMonthKey)
+        currentInvoiceMonthKey !== nextInvoiceMonthKey)
     ) {
       updates[
-        `/users/${uid}/cardTxByInvoice/${current.cardId}/${current.invoiceMonthKey}/${txId}`
+        `/users/${uid}/cardTxByInvoice/${current.cardId}/${currentInvoiceMonthKey}/${txId}`
       ] = null;
     }
 
     if (
       nextCardKey &&
       (current.cardId !== next.cardId ||
-        current.invoiceMonthKey !== next.invoiceMonthKey)
+        currentInvoiceMonthKey !== nextInvoiceMonthKey)
     ) {
       updates[
-        `/users/${uid}/cardTxByInvoice/${next.cardId}/${next.invoiceMonthKey}/${txId}`
+        `/users/${uid}/cardTxByInvoice/${next.cardId}/${nextInvoiceMonthKey}/${txId}`
       ] = true;
       updates[
-        `/users/${uid}/invoices/${next.cardId}/${next.invoiceMonthKey}/meta`
+        `/users/${uid}/invoices/${next.cardId}/${nextInvoiceMonthKey}/meta`
       ] = stripUndefined({
-        monthKey: next.invoiceMonthKey,
+        monthKey: nextInvoiceMonthKey,
         updatedAt: Date.now(),
       });
     }
 
     await update(ref(db), updates);
-    if (current.cardId && current.invoiceMonthKey) {
+    if (current.cardId && currentInvoiceMonthKey) {
       await cardRepo.recomputeInvoiceMeta(
         current.cardId,
-        current.invoiceMonthKey
+        currentInvoiceMonthKey
       );
     }
-    if (next.cardId && next.invoiceMonthKey) {
-      await cardRepo.recomputeInvoiceMeta(next.cardId, next.invoiceMonthKey);
+    if (next.cardId && nextInvoiceMonthKey) {
+      await cardRepo.recomputeInvoiceMeta(next.cardId, nextInvoiceMonthKey);
     }
     return next;
   }
@@ -6029,7 +6687,7 @@ function createTransactionRepository(cardRepo) {
     const results = await Promise.all(
       ids.map(async (id) => {
         const txSnap = await get(ref(db, `/users/${uid}/tx/${id}`));
-        return txSnap.exists() ? txSnap.val() : null;
+        return txSnap.exists() ? normalizeTransactionRecord(txSnap.val()) : null;
       })
     );
     const allTransactions = results.filter(Boolean);
@@ -6038,13 +6696,14 @@ function createTransactionRepository(cardRepo) {
     // (elas aparecem apenas como resumo da fatura no mês de vencimento)
     const transactions = allTransactions.filter(tx => {
       // Se não tem cartão, incluir sempre
-      if (!tx.cardId || !tx.invoiceMonthKey) {
+      const invoiceMonthKey = getTxInvoiceMonthKey(tx);
+      if (!tx.cardId || !invoiceMonthKey) {
         return true;
       }
       
       // Se tem cartão mas a fatura é do mês atual, incluir
       // (transações do cartão aparecem no mês da fatura como resumo)
-      return tx.invoiceMonthKey === monthKey;
+      return invoiceMonthKey === monthKey;
     });
     
     // Adicionar transações virtuais de resumo de faturas
@@ -6057,10 +6716,9 @@ function createTransactionRepository(cardRepo) {
       const invoiceTransactions = await listInvoiceTransactions(card.id, monthKey);
       
       if (invoiceTransactions.length > 0) {
-        // Calcular o total da fatura
-        const totalCents = invoiceTransactions.reduce((sum, tx) => {
-          return sum + Math.round((Number(tx.amount) || 0) * 100);
-        }, 0);
+        // Calcular o total da fatura com sinal (receitas reduzem, despesas aumentam)
+        const invoiceItems = invoiceTransactions.filter((tx) => ["expense", "income"].includes(tx.kind));
+        const totalCents = getInvoiceTotalCents(invoiceItems);
         
         // Buscar a data de vencimento (dia de vencimento do cartão)
         const dueDay = card.dueDay || 15; // Padrão: dia 15
@@ -6085,6 +6743,8 @@ function createTransactionRepository(cardRepo) {
           monthKey: monthKey,
           cardId: card.id,
           invoiceMonthKey: monthKey,
+          statementMonthKey: monthKey,
+          paymentMethod: "card",
           isInvoiceSummary: true, // Flag para identificar que é um resumo
           _isVirtual: true, // Não deve ser editável/deletável diretamente
         };
@@ -6110,7 +6770,7 @@ function createTransactionRepository(cardRepo) {
     const results = await Promise.all(
       ids.map(async (id) => {
         const txSnap = await get(ref(db, `/users/${uid}/tx/${id}`));
-        return txSnap.exists() ? txSnap.val() : null;
+        return txSnap.exists() ? normalizeTransactionRecord(txSnap.val()) : null;
       })
     );
     return results.filter(Boolean);
@@ -6130,10 +6790,597 @@ function createTransactionRepository(cardRepo) {
     const results = await Promise.all(
       ids.map(async (id) => {
         const txSnap = await get(ref(db, `/users/${uid}/tx/${id}`));
-        return txSnap.exists() ? txSnap.val() : null;
+        return txSnap.exists() ? normalizeTransactionRecord(txSnap.val()) : null;
       })
     );
     return results.filter(Boolean);
+  }
+
+  async function listInstallmentsForGroup(uidParam, cardId, installmentGroupId) {
+    const uid = getUserId();
+    if (uidParam && uidParam !== uid) {
+      throw new Error("UID inválido para a sessão atual.");
+    }
+    if (!cardId || !installmentGroupId) {
+      return [];
+    }
+
+    const snapshot = await get(ref(db, `/users/${uid}/tx`));
+    if (!snapshot.exists()) {
+      return [];
+    }
+
+    const all = Object.values(snapshot.val() || {})
+      .map(normalizeTransactionRecord)
+      .filter((tx) => {
+        const groupId = tx?.installment?.groupId || tx?.installmentGroupId;
+        return (
+          tx?.cardId === cardId &&
+          groupId === installmentGroupId &&
+          (tx?.paymentMethod === "card" || Boolean(tx?.cardId))
+        );
+      });
+
+    all.sort((a, b) => {
+      const indexA = Number(a?.installment?.current || a?.installmentIndex || 0);
+      const indexB = Number(b?.installment?.current || b?.installmentIndex || 0);
+      return indexA - indexB;
+    });
+
+    return all;
+  }
+
+  function extractInstallmentSeriesInfo(installments) {
+    const rows = (installments || []).map((tx) => {
+      const current = Number(tx?.installment?.current || tx?.installmentIndex || 0);
+      const total = Number(tx?.installment?.total || tx?.installmentCount || 0);
+      const invoiceMonthKey = getTxInvoiceMonthKey(tx);
+      return {
+        tx,
+        current,
+        total,
+        invoiceMonthKey,
+      };
+    }).filter((row) => Number.isFinite(row.current) && row.current > 0);
+
+    const installmentTotal = rows.reduce((max, row) => {
+      const safeTotal = Number.isFinite(row.total) && row.total > 0 ? row.total : row.current;
+      return Math.max(max, safeTotal);
+    }, 0);
+
+    const presentSet = new Set(rows.map((row) => row.current));
+    const presentIndices = Array.from(presentSet).sort((a, b) => a - b);
+    const missingIndices = [];
+    for (let index = 1; index <= installmentTotal; index += 1) {
+      if (!presentSet.has(index)) {
+        missingIndices.push(index);
+      }
+    }
+
+    const expectedInvoiceByIndex = {};
+    missingIndices.forEach((missingIndex) => {
+      const anchor = rows
+        .filter((row) => row.invoiceMonthKey)
+        .sort((a, b) => Math.abs(a.current - missingIndex) - Math.abs(b.current - missingIndex))[0];
+      if (!anchor) return;
+      expectedInvoiceByIndex[missingIndex] = addMonths(anchor.invoiceMonthKey, missingIndex - anchor.current);
+    });
+
+    return {
+      installmentTotal,
+      presentIndices,
+      missingIndices,
+      expectedInvoiceByIndex,
+    };
+  }
+
+  async function listInstallmentGaps(uidParam, cardId, installmentGroupId) {
+    const allInstallments = await listInstallmentsForGroup(uidParam, cardId, installmentGroupId);
+    const series = extractInstallmentSeriesInfo(allInstallments);
+    return {
+      groupId: installmentGroupId,
+      ...series,
+      allInstallments,
+    };
+  }
+
+  function sanitizeInstallmentBaseDescription(value) {
+    return String(value || "")
+      .replace(/\s+\d{1,3}\s*\/\s*\d{1,3}\s*$/i, "")
+      .trim();
+  }
+
+  function shiftDateByMonthsPreservingDay(dateString, monthsOffset) {
+    if (!dateString) {
+      return "";
+    }
+    const [year, month, day] = String(dateString).split("-").map(Number);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+      return "";
+    }
+    const date = new Date(year, month - 1, day);
+    const originalDay = date.getDate();
+    date.setMonth(date.getMonth() + monthsOffset);
+    if (date.getDate() !== originalDay) {
+      date.setDate(0);
+    }
+    return date.toISOString().split("T")[0];
+  }
+
+  function estimateMissingInstallmentAmountCents(installments, missingIndex) {
+    const rows = (installments || [])
+      .map((tx) => {
+        const index = Number(tx?.installment?.current || tx?.installmentIndex || 0);
+        const amountCents = Number.isFinite(Number(tx?.amountCents))
+          ? Math.round(Number(tx.amountCents))
+          : Math.round((Number(tx?.amount) || 0) * 100);
+        return { index, amountCents };
+      })
+      .filter((row) => row.index > 0 && Number.isFinite(row.amountCents));
+
+    const exact = rows.find((row) => row.index === missingIndex);
+    if (exact) {
+      return exact.amountCents;
+    }
+
+    const nearest = rows
+      .sort((a, b) => Math.abs(a.index - missingIndex) - Math.abs(b.index - missingIndex))[0];
+
+    return nearest ? nearest.amountCents : 0;
+  }
+
+  async function listAllInstallmentGaps(uidParam) {
+    const uid = getUserId();
+    if (uidParam && uidParam !== uid) {
+      throw new Error("UID inválido para a sessão atual.");
+    }
+
+    const snapshot = await get(ref(db, `/users/${uid}/tx`));
+    if (!snapshot.exists()) {
+      return [];
+    }
+
+    const grouped = new Map();
+    Object.values(snapshot.val() || {})
+      .map(normalizeTransactionRecord)
+      .forEach((tx) => {
+        const groupId = tx?.installment?.groupId || tx?.installmentGroupId;
+        if (!groupId || !tx?.cardId) {
+          return;
+        }
+        const mapKey = `${tx.cardId}::${groupId}`;
+        if (!grouped.has(mapKey)) {
+          grouped.set(mapKey, {
+            cardId: tx.cardId,
+            groupId,
+            installments: [],
+          });
+        }
+        grouped.get(mapKey).installments.push(tx);
+      });
+
+    return Array.from(grouped.values())
+      .map((entry) => {
+        const series = extractInstallmentSeriesInfo(entry.installments);
+        if (!series.missingIndices.length) {
+          return null;
+        }
+        const seed = entry.installments[0] || {};
+        return {
+          cardId: entry.cardId,
+          groupId: entry.groupId,
+          description: sanitizeInstallmentBaseDescription(seed.description || "Compra parcelada"),
+          installmentTotal: series.installmentTotal,
+          presentIndices: series.presentIndices,
+          missingIndices: series.missingIndices,
+          expectedInvoiceByIndex: series.expectedInvoiceByIndex,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => {
+        const aMissing = a.missingIndices?.[0] || 0;
+        const bMissing = b.missingIndices?.[0] || 0;
+        return aMissing - bMissing;
+      });
+  }
+
+  async function restoreMissingInstallment({ uid: uidParam, cardId, installmentGroupId, missingIndex }) {
+    const uid = getUserId();
+    if (uidParam && uidParam !== uid) {
+      throw new Error("UID inválido para a sessão atual.");
+    }
+
+    const targetIndex = Number(missingIndex);
+    if (!cardId || !installmentGroupId || !Number.isInteger(targetIndex) || targetIndex < 1) {
+      throw new Error("Parâmetros inválidos para repor parcela.");
+    }
+
+    const gapInfo = await listInstallmentGaps(uid, cardId, installmentGroupId);
+    if (!gapInfo.installmentTotal) {
+      throw new Error("Grupo de parcelamento não encontrado.");
+    }
+
+    if (!gapInfo.missingIndices.includes(targetIndex)) {
+      throw new Error(`A parcela ${targetIndex}/${gapInfo.installmentTotal} não está faltando.`);
+    }
+
+    const alreadyExists = gapInfo.allInstallments.some((tx) => {
+      const index = Number(tx?.installment?.current || tx?.installmentIndex || 0);
+      return index === targetIndex;
+    });
+    if (alreadyExists) {
+      throw new Error(`A parcela ${targetIndex}/${gapInfo.installmentTotal} já existe.`);
+    }
+
+    const seed = gapInfo.allInstallments[0] || null;
+    if (!seed) {
+      throw new Error("Não há referência suficiente no grupo para repor a parcela.");
+    }
+
+    const baseDescription = sanitizeInstallmentBaseDescription(seed.description || "");
+    const expectedMonthKey = gapInfo.expectedInvoiceByIndex?.[targetIndex] || "";
+    if (!expectedMonthKey) {
+      throw new Error("Não foi possível determinar o mês esperado da parcela faltante.");
+    }
+
+    const anchor = gapInfo.allInstallments
+      .map((tx) => ({
+        tx,
+        current: Number(tx?.installment?.current || tx?.installmentIndex || 0),
+      }))
+      .filter((row) => row.current > 0)
+      .sort((a, b) => Math.abs(a.current - targetIndex) - Math.abs(b.current - targetIndex))[0];
+
+    if (!anchor?.tx) {
+      throw new Error("Não foi possível localizar uma referência para reposição.");
+    }
+
+    const monthDelta = targetIndex - anchor.current;
+    const estimatedDate = shiftDateByMonthsPreservingDay(anchor.tx.date, monthDelta);
+    const amountCents = estimateMissingInstallmentAmountCents(gapInfo.allInstallments, targetIndex);
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
+      throw new Error("Não foi possível estimar o valor da parcela faltante.");
+    }
+
+    const txRef = push(ref(db, `/users/${uid}/tx`));
+    const txId = txRef.key;
+    const payload = stripUndefined({
+      ...seed,
+      id: txId,
+      description: baseDescription,
+      kind: "expense",
+      amount: amountCents / 100,
+      amountCents,
+      monthKey: expectedMonthKey,
+      invoiceMonthKey: expectedMonthKey,
+      statementMonthKey: expectedMonthKey,
+      date: estimatedDate || `${expectedMonthKey}-01`,
+      installment: {
+        current: targetIndex,
+        total: gapInfo.installmentTotal,
+        groupId: installmentGroupId,
+      },
+      installmentGroupId,
+      installmentIndex: targetIndex,
+      installmentCount: gapInfo.installmentTotal,
+      isProjected: expectedMonthKey > getDefaultMonth(),
+      paidAt: null,
+      settled: false,
+      settledAt: null,
+      settledBy: null,
+      updatedAt: Date.now(),
+      createdAt: Date.now(),
+    });
+
+    const updates = buildTransactionUpdates(uid, txId, payload);
+    await update(ref(db), updates);
+    await cardRepo.recomputeInvoiceMeta(cardId, expectedMonthKey);
+
+    return {
+      groupId: installmentGroupId,
+      restoredIndex: targetIndex,
+      total: gapInfo.installmentTotal,
+      createdTxId: txId,
+      restoredMonthKey: expectedMonthKey,
+      restoredAmountCents: amountCents,
+    };
+  }
+
+  async function restoreMissingInstallmentAuto({ uid: uidParam, cardId, installmentGroupId, missingIndex }) {
+    const uid = getUserId();
+    if (uidParam && uidParam !== uid) {
+      throw new Error("UID inválido para a sessão atual.");
+    }
+
+    const targetIndex = Number(missingIndex);
+    if (!cardId || !installmentGroupId || !Number.isInteger(targetIndex) || targetIndex < 1) {
+      throw new Error("Parâmetros inválidos para reposição automática.");
+    }
+
+    const gapInfo = await listInstallmentGaps(uid, cardId, installmentGroupId);
+    if (!gapInfo.installmentTotal) {
+      throw new Error("Grupo de parcelamento não encontrado.");
+    }
+
+    if (!gapInfo.missingIndices.includes(targetIndex)) {
+      throw new Error(`A parcela ${targetIndex}/${gapInfo.installmentTotal} não está faltando.`);
+    }
+
+    const restored = await restoreMissingInstallment({
+      uid,
+      cardId,
+      installmentGroupId,
+      missingIndex: targetIndex,
+    });
+
+    return restored;
+  }
+
+  async function anticipateInstallments({ uid: uidParam, cardId, targetMonthKey, txIds, discountCents = 0 }) {
+    const uid = getUserId();
+    if (uidParam && uidParam !== uid) {
+      throw new Error("UID inválido para a sessão atual.");
+    }
+    if (!cardId) {
+      throw new Error("Cartão inválido.");
+    }
+    if (!validateMonthKey(targetMonthKey)) {
+      throw new Error("Mês de fatura inválido.");
+    }
+
+    const ids = Array.from(new Set((txIds || []).filter(Boolean)));
+    if (!ids.length) {
+      throw new Error("Selecione ao menos uma parcela para antecipar.");
+    }
+
+    const targetMeta = await cardRepo.getInvoiceMeta(cardId, targetMonthKey);
+    if (targetMeta?.paid || targetMeta?.paidAt) {
+      throw new Error("A fatura de destino já está paga.");
+    }
+
+    const transactions = await Promise.all(ids.map((txId) => getTransactionById(uid, txId)));
+    const now = Date.now();
+    const batchId = createAnticipationBatchId();
+    const updates = {};
+    const recomputeTargets = new Set([`${cardId}::${targetMonthKey}`]);
+    const fromMonthKeys = new Set();
+    const auditItems = [];
+
+    const fromInvoiceMetaCache = new Map();
+    const getMetaForMonth = async (monthKey) => {
+      if (!fromInvoiceMetaCache.has(monthKey)) {
+        fromInvoiceMetaCache.set(monthKey, await cardRepo.getInvoiceMeta(cardId, monthKey));
+      }
+      return fromInvoiceMetaCache.get(monthKey);
+    };
+
+    for (let index = 0; index < transactions.length; index += 1) {
+      const tx = transactions[index];
+      if (!tx) {
+        throw new Error("Uma ou mais parcelas não foram encontradas.");
+      }
+      if (tx.cardId !== cardId) {
+        throw new Error("Todas as parcelas devem pertencer ao mesmo cartão.");
+      }
+      if ((tx.paymentMethod && tx.paymentMethod !== "card") || !tx.cardId) {
+        throw new Error("Somente transações de cartão podem ser antecipadas.");
+      }
+      if (tx.paidAt) {
+        throw new Error("Existem parcelas já pagas na seleção.");
+      }
+
+      const currentInvoiceMonthKey = getTxInvoiceMonthKey(tx);
+      if (!currentInvoiceMonthKey) {
+        throw new Error("Parcela sem mês de fatura.");
+      }
+      if (currentInvoiceMonthKey <= targetMonthKey) {
+        throw new Error("Apenas parcelas futuras podem ser antecipadas.");
+      }
+
+      const fromMeta = await getMetaForMonth(currentInvoiceMonthKey);
+      if (fromMeta?.paid || fromMeta?.paidAt) {
+        throw new Error("Existem parcelas em fatura já paga.");
+      }
+
+      const normalized = normalizePayload({
+        ...tx,
+        invoiceMonthKey: targetMonthKey,
+        statementMonthKey: targetMonthKey,
+        isAnticipated: true,
+        anticipatedAt: now,
+        anticipatedFromMonthKey: currentInvoiceMonthKey,
+        anticipationBatchId: batchId,
+        originalInvoiceMonthKey: tx.originalInvoiceMonthKey || currentInvoiceMonthKey,
+        originalDate: tx.originalDate || tx.date,
+        updatedAt: now,
+      });
+
+      updates[`/users/${uid}/tx/${tx.id}`] = normalized;
+      updates[`/users/${uid}/cardTxByInvoice/${cardId}/${currentInvoiceMonthKey}/${tx.id}`] = null;
+      updates[`/users/${uid}/cardTxByInvoice/${cardId}/${targetMonthKey}/${tx.id}`] = true;
+
+      fromMonthKeys.add(currentInvoiceMonthKey);
+      recomputeTargets.add(`${cardId}::${currentInvoiceMonthKey}`);
+      auditItems.push({
+        txId: tx.id,
+        from: currentInvoiceMonthKey,
+        to: targetMonthKey,
+        amountCents: Number(normalized.amountCents) || 0,
+      });
+    }
+
+    let discountTxId = null;
+    const normalizedDiscountCents = Math.max(0, Math.round(Number(discountCents) || 0));
+    if (normalizedDiscountCents > 0) {
+      const txRef = push(ref(db, `/users/${uid}/tx`));
+      discountTxId = txRef.key;
+      const discountPayload = normalizePayload({
+        id: discountTxId,
+        date: `${targetMonthKey}-01`,
+        monthKey: targetMonthKey,
+        invoiceMonthKey: targetMonthKey,
+        statementMonthKey: targetMonthKey,
+        description: "Desconto antecipação",
+        amount: normalizedDiscountCents / 100,
+        amountCents: normalizedDiscountCents,
+        kind: "income",
+        paymentMethod: "card",
+        cardId,
+        categoryId: "others",
+        isAnticipationDiscount: true,
+        anticipationBatchId: batchId,
+        createdAt: now,
+      });
+      Object.assign(updates, buildTransactionUpdates(uid, discountTxId, discountPayload));
+    }
+
+    updates[`/users/${uid}/installmentAnticipations/${batchId}`] = {
+      id: batchId,
+      cardId,
+      targetMonthKey,
+      fromMonthKeys: Array.from(fromMonthKeys),
+      txIds: ids,
+      txItems: auditItems,
+      discountCents: normalizedDiscountCents,
+      discountTxId,
+      createdAt: now,
+      uid,
+    };
+
+    await update(ref(db), updates);
+    await Promise.all(
+      Array.from(recomputeTargets).map((key) => {
+        const [recomputeCardId, monthKey] = key.split("::");
+        return cardRepo.recomputeInvoiceMeta(recomputeCardId, monthKey);
+      })
+    );
+
+    return {
+      batchId,
+      txIds: ids,
+      discountTxId,
+      discountCents: normalizedDiscountCents,
+    };
+  }
+
+  async function undoAnticipation(batchId) {
+    const uid = getUserId();
+    if (!batchId) {
+      throw new Error("Lote de antecipação inválido.");
+    }
+
+    const batchPath = `/users/${uid}/installmentAnticipations/${batchId}`;
+    const batchSnap = await get(ref(db, batchPath));
+    if (!batchSnap.exists()) {
+      throw new Error("Antecipação não encontrada.");
+    }
+
+    const batch = batchSnap.val();
+    if (batch.undoneAt) {
+      throw new Error("Esta antecipação já foi desfeita.");
+    }
+
+    const cardId = batch.cardId;
+    const targetMonthKey = batch.targetMonthKey;
+    const txIds = Array.isArray(batch.txIds) ? batch.txIds : [];
+    const targetMeta = await cardRepo.getInvoiceMeta(cardId, targetMonthKey);
+    if (targetMeta?.paid || targetMeta?.paidAt) {
+      throw new Error("Não é possível desfazer: a fatura de destino já foi paga.");
+    }
+
+    const txRecords = await Promise.all(txIds.map((txId) => getTransactionById(uid, txId)));
+    const updates = {};
+    const recomputeTargets = new Set();
+
+    for (let index = 0; index < txRecords.length; index += 1) {
+      const tx = txRecords[index];
+      if (!tx) {
+        throw new Error("Uma ou mais parcelas não foram encontradas para desfazer.");
+      }
+      if (tx.paidAt) {
+        throw new Error("Não é possível desfazer: existem parcelas já pagas.");
+      }
+
+      const currentInvoiceMonthKey = getTxInvoiceMonthKey(tx);
+      const originalInvoiceMonthKey =
+        tx.originalInvoiceMonthKey || tx.anticipatedFromMonthKey;
+
+      if (!originalInvoiceMonthKey) {
+        throw new Error("Parcela sem mês de origem para restauração.");
+      }
+
+      const originalMeta = await cardRepo.getInvoiceMeta(cardId, originalInvoiceMonthKey);
+      if (originalMeta?.paid || originalMeta?.paidAt) {
+        throw new Error("Não é possível desfazer: a fatura de origem já está paga.");
+      }
+
+      const reverted = normalizePayload({
+        ...tx,
+        invoiceMonthKey: originalInvoiceMonthKey,
+        statementMonthKey: originalInvoiceMonthKey,
+        isAnticipated: null,
+        anticipatedAt: null,
+        anticipatedFromMonthKey: null,
+        anticipationBatchId: null,
+        updatedAt: Date.now(),
+      });
+
+      updates[`/users/${uid}/tx/${tx.id}`] = reverted;
+      if (currentInvoiceMonthKey) {
+        updates[`/users/${uid}/cardTxByInvoice/${cardId}/${currentInvoiceMonthKey}/${tx.id}`] = null;
+        recomputeTargets.add(`${cardId}::${currentInvoiceMonthKey}`);
+      }
+      updates[`/users/${uid}/cardTxByInvoice/${cardId}/${originalInvoiceMonthKey}/${tx.id}`] = true;
+      recomputeTargets.add(`${cardId}::${originalInvoiceMonthKey}`);
+    }
+
+    if (batch.discountTxId) {
+      const discountTx = await getTransactionById(uid, batch.discountTxId);
+      if (discountTx?.paidAt) {
+        throw new Error("Não é possível desfazer: o desconto já foi pago.");
+      }
+      if (discountTx) {
+        const discountInvoiceMonth = getTxInvoiceMonthKey(discountTx);
+        updates[`/users/${uid}/tx/${discountTx.id}`] = null;
+        if (discountTx.monthKey) {
+          updates[`/users/${uid}/txByMonth/${discountTx.monthKey}/${discountTx.id}`] = null;
+        }
+        if (discountInvoiceMonth) {
+          updates[`/users/${uid}/cardTxByInvoice/${cardId}/${discountInvoiceMonth}/${discountTx.id}`] = null;
+          recomputeTargets.add(`${cardId}::${discountInvoiceMonth}`);
+        }
+      }
+    }
+
+    updates[`${batchPath}/undoneAt`] = Date.now();
+    updates[`${batchPath}/undoneBy`] = uid;
+
+    await update(ref(db), updates);
+    await Promise.all(
+      Array.from(recomputeTargets).map((key) => {
+        const [recomputeCardId, monthKey] = key.split("::");
+        return cardRepo.recomputeInvoiceMeta(recomputeCardId, monthKey);
+      })
+    );
+
+    return { ok: true, batchId };
+  }
+
+  async function listAnticipationBatches(cardId, targetMonthKey) {
+    const uid = getUserId();
+    const snapshot = await get(ref(db, `/users/${uid}/installmentAnticipations`));
+    if (!snapshot.exists()) {
+      return [];
+    }
+    const rows = Object.values(snapshot.val() || {});
+    return rows
+      .filter((row) =>
+        row &&
+        row.cardId === cardId &&
+        row.targetMonthKey === targetMonthKey &&
+        !row.undoneAt
+      )
+      .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
   }
 
   return {
@@ -6150,6 +7397,14 @@ function createTransactionRepository(cardRepo) {
     listMonthTransactions,
     listMonthTransactionsRaw,
     listInvoiceTransactions,
+    listInstallmentsForGroup,
+    listInstallmentGaps,
+    listAllInstallmentGaps,
+    restoreMissingInstallment,
+    restoreMissingInstallmentAuto,
+    anticipateInstallments,
+    undoAnticipation,
+    listAnticipationBatches,
   };
 }
 

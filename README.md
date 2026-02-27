@@ -36,6 +36,7 @@ Acesse `http://localhost:8000` no navegador.
 /users/{uid}/txByMonth/{YYYY-MM}/{txId}: true
 /users/{uid}/cardTxByInvoice/{cardId}/{invoiceYYYY-MM}/{txId}: true
 /users/{uid}/invoices/{cardId}/{invoiceYYYY-MM}/meta
+/users/{uid}/installmentAnticipations/{batchId}
 ```
 
 ## Repositório RTDB
@@ -47,6 +48,9 @@ O repositório está exposto em `window.pvaultRepository.transactions` e inclui:
 - `deleteTransaction(txId)`
 - `listMonthTransactions(monthKey)`
 - `listInvoiceTransactions(cardId, invoiceMonthKey)`
+- `listInstallmentsForGroup(uid, cardId, installmentGroupId)`
+- `anticipateInstallments({ uid, cardId, targetMonthKey, txIds, discountCents? })`
+- `undoAnticipation(batchId)`
 
 ## Rotas
 
