@@ -4254,8 +4254,19 @@ async function renderInvoices(target = appView) {
   // Estado de ordenação e agrupamento
   let currentSort = "date-desc";
   let isGrouped = false;
+  let anticipationSimulation = null;
 
-  const openAnticipationModal = ({ selectedMonth, groupLabel, installments, onConfirm }) => {
+  const resolveTxCents = (tx) => {
+    const amount = Number(tx?.amount);
+    if (Number.isFinite(amount)) {
+      return Math.round(amount * 100);
+    }
+    return Number.isFinite(Number(tx?.amountCents))
+      ? Math.round(Number(tx.amountCents))
+      : 0;
+  };
+
+  const openAnticipationModal = ({ selectedMonth, groupLabel, installments, invoiceBaseCents = 0, onConfirm }) => {
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
 
@@ -4314,6 +4325,8 @@ async function renderInvoices(target = appView) {
 
     const totalLine = document.createElement("p");
     totalLine.className = "anticipation-total";
+    const simulationLine = document.createElement("p");
+    simulationLine.className = "anticipation-total";
 
     const discountField = document.createElement("label");
     discountField.className = "field";
@@ -4380,19 +4393,22 @@ async function renderInvoices(target = appView) {
       const totalCents = selectedIds.reduce((sum, id) => {
         const tx = selectableById.get(id);
         if (!tx) return sum;
-        const cents = Number.isFinite(Number(tx.amountCents))
-          ? Math.round(Number(tx.amountCents))
-          : Math.round((Number(tx.amount) || 0) * 100);
+        const cents = resolveTxCents(tx);
         return sum + cents;
       }, 0);
 
+      const discountCents = Math.max(0, Math.round((Number(discountInput.value) || 0) * 100));
+      const simulatedTotalCents = Math.max(0, invoiceBaseCents + totalCents - discountCents);
+
       totalLine.textContent = `Total que vai para esta fatura: ${formatCurrencyFromCents(totalCents)}`;
+      simulationLine.textContent = `Simulação total da fatura: ${formatCurrencyFromCents(invoiceBaseCents)} → ${formatCurrencyFromCents(simulatedTotalCents)}`;
     };
 
     list.addEventListener("change", updateTotal);
+    discountInput.addEventListener("input", updateTotal);
     updateTotal();
 
-    modal.append(title, subtitle, list, totalLine, discountField, feedback, actions);
+    modal.append(title, subtitle, list, totalLine, discountField, simulationLine, feedback, actions);
     overlay.append(modal);
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) {
@@ -4484,6 +4500,7 @@ async function renderInvoices(target = appView) {
     const projection = await computeCardInvoiceProjection(cardId);
     const adjustedCents = projection.adjustedMap[selectedMonth] ?? Math.max(0, totalCents);
     const carryBefore = projection.carryBeforeMap[selectedMonth] ?? 0;
+    const baseInvoiceTotalCents = Math.max(0, adjustedCents);
 
     const invoiceSummary = document.createElement("section");
     invoiceSummary.className = "card";
@@ -4491,7 +4508,7 @@ async function renderInvoices(target = appView) {
     summaryTitle.textContent = `Fatura ${formatMonthLabel(selectedMonth)}`;
     const totalLine = document.createElement("p");
     const hasCreditThisMonth = totalCents < 0;
-    totalLine.textContent = `Total: ${formatCurrencyFromCents(hasCreditThisMonth ? 0 : adjustedCents)}`;
+    totalLine.textContent = `Total: ${formatCurrencyFromCents(hasCreditThisMonth ? 0 : baseInvoiceTotalCents)}`;
 
     let creditGeneratedLine = null;
     if (hasCreditThisMonth) {
@@ -4511,9 +4528,19 @@ async function renderInvoices(target = appView) {
     const statusLine = document.createElement("p");
     statusLine.textContent = `Status: ${paid ? "paga" : "aberta"}`;
 
+    let simulationLine = null;
+    if (anticipationSimulation && anticipationSimulation.monthKey === selectedMonth) {
+      simulationLine = document.createElement("p");
+      const signal = anticipationSimulation.deltaCents >= 0 ? "+" : "-";
+      simulationLine.textContent = `Simulação (${anticipationSimulation.groupLabel}): ${formatCurrencyFromCents(baseInvoiceTotalCents)} ${signal} ${formatCurrencyFromCents(Math.abs(anticipationSimulation.deltaCents))} = ${formatCurrencyFromCents(anticipationSimulation.simulatedTotalCents)}`;
+      simulationLine.style.fontWeight = "600";
+      simulationLine.style.color = "var(--text-secondary)";
+    }
+
     const buttonContainer = document.createElement("div");
     buttonContainer.style.display = "flex";
     buttonContainer.style.gap = "0.75rem";
+    buttonContainer.style.flexWrap = "wrap";
 
     if (!paid) {
       const payButton = createButton("Marcar como paga", {
@@ -4552,11 +4579,23 @@ async function renderInvoices(target = appView) {
     });
     buttonContainer.append(newTransactionButton);
 
+    if (simulationLine) {
+      const clearSimulationButton = createButton("Limpar simulação", {
+        variant: "secondary",
+        onClick: async () => {
+          anticipationSimulation = null;
+          await renderInvoiceContent(selectedMonth);
+        },
+      });
+      buttonContainer.append(clearSimulationButton);
+    }
+
     invoiceSummary.append(
       summaryTitle,
       totalLine,
       ...(creditGeneratedLine ? [creditGeneratedLine] : []),
       ...(creditLine ? [creditLine] : []),
+      ...(simulationLine ? [simulationLine] : []),
       statusLine,
       buttonContainer
     );
@@ -4742,6 +4781,29 @@ async function renderInvoices(target = appView) {
         actionBox.style.justifyContent = "flex-end";
 
         if (group.selectableFutureCount > 0) {
+          const simulateButton = createButton("Simular no total", {
+            variant: "secondary",
+            onClick: async () => {
+              const selectableFuture = group.allInstallments.filter((tx) => {
+                const txMonth = getTxInvoiceMonthKey(tx);
+                return txMonth > selectedMonth && !tx.paidAt;
+              });
+              const anticipatedCents = selectableFuture.reduce((sum, tx) => sum + resolveTxCents(tx), 0);
+              const deltaCents = anticipatedCents;
+              anticipationSimulation = {
+                monthKey: selectedMonth,
+                groupLabel: group.groupLabel,
+                anticipatedCents,
+                discountCents: 0,
+                deltaCents,
+                simulatedTotalCents: Math.max(0, baseInvoiceTotalCents + deltaCents),
+              };
+              await renderInvoiceContent(selectedMonth);
+            },
+          });
+          simulateButton.disabled = paid;
+          actionBox.append(simulateButton);
+
           const anticipateButton = createButton("Antecipar parcelas", {
             variant: "secondary",
             onClick: () => {
@@ -4749,7 +4811,9 @@ async function renderInvoices(target = appView) {
                 selectedMonth,
                 groupLabel: group.groupLabel,
                 installments: group.allInstallments,
+                invoiceBaseCents: baseInvoiceTotalCents,
                 onConfirm: async (selectedIds, discountCents) => {
+                  anticipationSimulation = null;
                   await transactionRepository.anticipateInstallments({
                     uid: getUserId(),
                     cardId,
@@ -5614,9 +5678,12 @@ function getInvoiceTotalCents(transactions) {
     if (!["expense", "income"].includes(tx?.kind) || tx?.kind === "transfer") {
       return sum;
     }
-    const cents = Number.isFinite(Number(tx?.amountCents))
-      ? Math.round(Number(tx.amountCents))
-      : Math.round((Number(tx?.amount) || 0) * 100);
+    const amount = Number(tx?.amount);
+    const cents = Number.isFinite(amount)
+      ? Math.round(amount * 100)
+      : Number.isFinite(Number(tx?.amountCents))
+        ? Math.round(Number(tx.amountCents))
+        : 0;
     return tx.kind === "income" ? sum - cents : sum + cents;
   }, 0);
 }
@@ -5887,8 +5954,10 @@ function createTransactionRepository(cardRepo) {
       normalized.statementMonthKey = normalized.monthKey;
     }
 
-    if (!Number.isFinite(Number(normalized.amountCents)) && Number.isFinite(Number(normalized.amount))) {
+    if (Number.isFinite(Number(normalized.amount))) {
       normalized.amountCents = Math.round(Number(normalized.amount) * 100);
+    } else if (!Number.isFinite(Number(normalized.amountCents))) {
+      normalized.amountCents = 0;
     }
 
     if (normalized.installment?.groupId && !normalized.installmentGroupId) {
